@@ -11,6 +11,8 @@ type declarations from `dist/`).
 
 ## Stdio server (one-liner)
 
+[`StdioMcpServer`](servers/stdio.md) — connects via a `StdioServerTransport`:
+
 ```typescript
 import { StdioMcpServer } from '@johannes.latzel/llm-chat-mcp';
 
@@ -21,6 +23,8 @@ await server.start(); // reads requests on stdin, writes on stdout
 
 ## HTTP server (Streamable HTTP)
 
+[`HttpMcpServer`](servers/http.md) — Express-based, multi-session:
+
 ```typescript
 import { HttpMcpServer } from '@johannes.latzel/llm-chat-mcp';
 
@@ -30,7 +34,8 @@ await server.start(); // binds to http://localhost:3000
 ```
 
 The `/mcp` endpoint follows the [Streamable HTTP transport spec][streamable-http].
-Each HTTP client gets its own session with an isolated transport + `McpServer` pair.
+Each HTTP client gets its own session with an isolated transport + `McpServer` pair
+(see [session lifecycle](servers/http.md#lifecycle)).
 
 ### Client example
 
@@ -58,11 +63,12 @@ curl -X DELETE http://localhost:3000/mcp \
 await server.stop();
 ```
 
-Closes all active HTTP sessions / stdio transport before returning.
+Closes all active HTTP sessions / stdio transport before returning. See
+[`BaseMcpServer.stop()`](servers/base.md#stop) for details.
 
 ## Next steps
 
 See the [Architecture](architecture.md) for design details and the
-[API Reference](api-reference.md) for the full API surface.
+[Server reference](servers/index.md) for the full API surface.
 
 [streamable-http]: https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http

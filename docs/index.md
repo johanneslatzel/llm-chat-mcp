@@ -8,6 +8,7 @@ be served over stdio or HTTP.
 
 - [Quick Start](quickstart.md) — get a server running in minutes
 - [Architecture](architecture.md) — design and internals
-- [API Reference](api-reference.md) — full class and method docs
+- [Servers](servers/index.md) — `BaseMcpServer`, `StdioMcpServer`, `HttpMcpServer`
+- [Converters](converters/index.md) — schema and result conversion
 
 [mcp]: https://modelcontextprotocol.io

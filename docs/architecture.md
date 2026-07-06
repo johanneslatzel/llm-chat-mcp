@@ -16,22 +16,26 @@ BaseMcpServer  (abstract)
   └── HttpMcpServer    — Streamable HTTP transport (Express)
 ```
 
-### BaseMcpServer
+### [`BaseMcpServer`](servers/base.md)
 
 - Stores the `serverInfo` metadata and a list of registered items
-- `register(item)` stores the item and registers its tools on the SDK's `McpServer`
-- `createFreshMcpServer()` creates a brand-new `McpServer` with all previously
-  registered tools replayed — used by `HttpMcpServer` to give each HTTP session
-  its own isolated server instance
-- `stop()` calls the `onStop()` lifecycle hook then closes the server
+- [`register(item)`](servers/base.md#register) stores the item and registers
+  its tools on the SDK's `McpServer`
+- [`createFreshMcpServer()`](servers/base.md#createfreshmcpserver-protected)
+  creates a brand-new `McpServer` with all previously registered tools replayed
+  — used by `HttpMcpServer` to give each HTTP session its own isolated server
+  instance
+- [`stop()`](servers/base.md#stop) calls the `onStop()` lifecycle hook then
+  closes the server
 - Subclasses implement `start()` to connect their transport
 
-### StdioMcpServer
+### [`StdioMcpServer`](servers/stdio.md)
 
-- `start()` creates a `StdioServerTransport` and connects
+- [`start()`](servers/stdio.md#start) creates a `StdioServerTransport` and
+  connects
 - Suitable for MCP clients that spawn a child process (e.g. VS Code, Claude Desktop)
 
-### HttpMcpServer
+### [`HttpMcpServer`](servers/http.md)
 
 - Express-based server listening on a configurable port
 - Provides a single route `POST /mcp` (Streamable HTTP)
@@ -39,7 +43,8 @@ BaseMcpServer  (abstract)
   `(StreamableHTTPServerTransport, McpServer)` pair, keyed by the
   `Mcp-Session-Id` header
 - Session map access is protected by an `async-mutex` `Mutex` to prevent
-  concurrent modification from overlapping requests
+  concurrent modification from overlapping requests (see
+  [`HttpMcpServer`](servers/http.md) for the full reference)
 
 #### Request routing (`/mcp`)
 
@@ -70,18 +75,20 @@ BaseMcpServer  (abstract)
 
 ## Internal converters
 
-### `toolSchemaToZod` (schema-converter.ts)
+### [`toolSchemaToZod`](converters/schema-converter.md) (schema-converter.ts)
 
 Converts the JSON Schema output from `Tool.toOpenAI().function.parameters` into
 a Zod object schema. Supports: `string`, `number`, `integer`, `boolean`,
 `array` (with nested items), `object` (with nested properties). Recursively
 handles required/optional fields and `description` annotations.
+See [`src/lib/schema-converter.ts`](../src/lib/schema-converter.ts).
 
-### `toolResultsToMcp` (result-converter.ts)
+### [`toolResultsToMcp`](converters/result-converter.md) (result-converter.ts)
 
 Converts an array of llm-chat `ToolResult` into the MCP `CallToolResult` shape.
 Maps each result to a `{ type: "text", text: string }` content entry. Sets
 `isError: true` when any result has a non-success status.
+See [`src/lib/result-converter.ts`](../src/lib/result-converter.ts).
 
 ## Public API surface
 
@@ -97,5 +104,10 @@ All public exports come from `src/index.ts` — the `lib/` converters and the
 | `express`                   | HTTP server                  |
 | `async-mutex`               | Session map synchronisation  |
 | `zod`                       | Runtime schema validation    |
+
+---
+
+See also: [Servers](servers/index.md), [Converters](converters/index.md),
+[Quick Start](quickstart.md)
 
 [mcp]: https://modelcontextprotocol.io

@@ -740,9 +740,7 @@ describe('HttpMcpServer', () => {
                     (res) => {
                         const sessionId = res.headers['mcp-session-id'] as string;
                         res.on('data', () => {});
-                        res.on('end', () =>
-                            resolve({ sessionId })
-                        );
+                        res.on('end', () => resolve({ sessionId }));
                         res.on('error', reject);
                     }
                 );
@@ -846,9 +844,7 @@ describe('HttpMcpServer', () => {
                     (res) => {
                         const sessionId = res.headers['mcp-session-id'] as string;
                         res.on('data', () => {});
-                        res.on('end', () =>
-                            resolve({ sessionId })
-                        );
+                        res.on('end', () => resolve({ sessionId }));
                         res.on('error', reject);
                     }
                 );
