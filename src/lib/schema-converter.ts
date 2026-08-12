@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Convert a JSON Schema array property to a Zod array. */
-function arrayPropToZod(prop: Record<string, unknown>): z.ZodArray<z.ZodTypeAny> {
+function arrayPropToZod(prop: Record<string, unknown>): z.ZodArray<z.ZodType> {
     if (prop.items) {
         return z.array(jsonSchemaPropToZod(prop.items as Record<string, unknown>, true));
     }
@@ -9,10 +9,10 @@ function arrayPropToZod(prop: Record<string, unknown>): z.ZodArray<z.ZodTypeAny>
 }
 
 /** Convert a JSON Schema object property to a Zod object. */
-function objectPropToZod(prop: Record<string, unknown>): z.ZodObject<Record<string, z.ZodTypeAny>> {
+function objectPropToZod(prop: Record<string, unknown>): z.ZodObject<Record<string, z.ZodType>> {
     const properties = (prop.properties ?? {}) as Record<string, Record<string, unknown>>;
     const requiredFields = (prop.required ?? []) as string[];
-    const shape: Record<string, z.ZodTypeAny> = {};
+    const shape: Record<string, z.ZodType> = {};
     for (const [key, child] of Object.entries(properties)) {
         shape[key] = jsonSchemaPropToZod(child, requiredFields.includes(key));
     }
@@ -20,7 +20,7 @@ function objectPropToZod(prop: Record<string, unknown>): z.ZodObject<Record<stri
 }
 
 /** Map a JSON Schema type string to a Zod type, delegating array/object to dedicated helpers. */
-function typeToZod(type: string, prop: Record<string, unknown>): z.ZodTypeAny {
+function typeToZod(type: string, prop: Record<string, unknown>): z.ZodType {
     switch (type) {
         case 'string':
             return z.string();
@@ -40,7 +40,7 @@ function typeToZod(type: string, prop: Record<string, unknown>): z.ZodTypeAny {
 }
 
 /** Recursively convert a single JSON Schema property to a Zod type. */
-function jsonSchemaPropToZod(prop: Record<string, unknown>, required: boolean): z.ZodTypeAny {
+function jsonSchemaPropToZod(prop: Record<string, unknown>, required: boolean): z.ZodType {
     const type = prop.type as string;
     const description = prop.description as string | undefined;
 
@@ -63,11 +63,11 @@ function jsonSchemaPropToZod(prop: Record<string, unknown>, required: boolean): 
  */
 export function toolSchemaToZod(tool: {
     toOpenAI(): { function: { parameters?: Record<string, unknown> | null } };
-}): z.ZodObject<Record<string, z.ZodTypeAny>> {
+}): z.ZodObject<Record<string, z.ZodType>> {
     const params = tool.toOpenAI().function.parameters ?? {};
     const properties = (params.properties ?? {}) as Record<string, Record<string, unknown>>;
     const required = (params.required ?? []) as string[];
-    const shape: Record<string, z.ZodTypeAny> = {};
+    const shape: Record<string, z.ZodType> = {};
     for (const [key, prop] of Object.entries(properties)) {
         shape[key] = jsonSchemaPropToZod(prop, required.includes(key));
     }
