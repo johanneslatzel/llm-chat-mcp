@@ -5,6 +5,6 @@ const server = new StdioMcpServer({
     name: 'package-server',
     version: '1.0.0'
 });
-server.register(new GreetTool());
-server.register(new NoParamTool());
+server.registerTool(new GreetTool());
+server.registerTool(new NoParamTool());
 await server.start();

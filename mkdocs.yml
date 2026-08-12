@@ -16,15 +16,16 @@ nav:
   - Overview: index.md
   - Quick Start: quickstart.md
   - Architecture: architecture.md
+  - Document Resources: resources.md
   - Servers:
-    - Overview: servers/index.md
+    - Servers: servers/index.md
     - BaseMcpServer: servers/base.md
     - StdioMcpServer: servers/stdio.md
     - HttpMcpServer: servers/http.md
   - Converters:
-    - Overview: converters/index.md
-    - Schema converter: converters/schema-converter.md
-    - Result converter: converters/result-converter.md
+    - Converters: converters/index.md
+    - toolSchemaToZod: converters/schema-converter.md
+    - toolResultsToMcp: converters/result-converter.md
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true

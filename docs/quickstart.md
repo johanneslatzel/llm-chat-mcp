@@ -6,30 +6,43 @@
 npm install @johannes.latzel/llm-chat-mcp
 ```
 
-Requirements: Node.js >= 18, TypeScript >= 5.0 (the package ships `.js` with
+Requirements: Node.js >= 20, TypeScript >= 5.0 (the package ships `.js` with
 type declarations from `dist/`).
 
 ## Stdio server (one-liner)
 
-[`StdioMcpServer`](servers/stdio.md) — connects via a `StdioServerTransport`:
+[`StdioMcpServer`](servers/stdio.md): connects via a `StdioServerTransport`:
 
 ```typescript
 import { StdioMcpServer } from '@johannes.latzel/llm-chat-mcp';
 
 const server = new StdioMcpServer({ name: 'my-server', version: '1.0.0' });
-server.register(tool); // Tool or ToolPackage instance
+server.registerTool(tool); // Tool or ToolPackage instance
 await server.start(); // reads requests on stdin, writes on stdout
 ```
 
+### Serving documents
+
+Expose files and folders as MCP resources (see [Resources](resources.md)):
+
+```typescript
+server.registerDocument('./README.md');
+server.registerFolder('./docs'); // every supported type, recursively
+await server.start();
+```
+
+Clients list them with `resources/list` and read them with `resources/read`.
+
 ## HTTP server (Streamable HTTP)
 
-[`HttpMcpServer`](servers/http.md) — Express-based, multi-session:
+[`HttpMcpServer`](servers/http.md): Express-based, multi-session:
 
 ```typescript
 import { HttpMcpServer } from '@johannes.latzel/llm-chat-mcp';
 
 const server = new HttpMcpServer({ name: 'my-server', version: '1.0.0', port: 3000 });
-server.register(tool); // Tool or ToolPackage instance
+server.registerTool(tool); // Tool or ToolPackage instance
+server.registerFolder('./docs'); // documents as MCP resources
 await server.start(); // binds to http://localhost:3000
 ```
 

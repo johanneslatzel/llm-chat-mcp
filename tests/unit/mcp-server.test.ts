@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import http from 'node:http';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
     Tool,
     ToolPackage,
@@ -74,7 +76,7 @@ describe('McpToolServer', () => {
             name: 'test-server',
             version: '1.0.0'
         });
-        expect(() => server.register(new TestTool('my-tool'))).not.toThrow();
+        expect(() => server.registerTool(new TestTool('my-tool'))).not.toThrow();
     });
 
     it('registers a ToolPackage', () => {
@@ -82,7 +84,7 @@ describe('McpToolServer', () => {
             name: 'test-server',
             version: '1.0.0'
         });
-        expect(() => server.register(new TestPackage())).not.toThrow();
+        expect(() => server.registerTool(new TestPackage())).not.toThrow();
     });
 
     it('throws when registering duplicate tool name', () => {
@@ -91,8 +93,8 @@ describe('McpToolServer', () => {
             version: '1.0.0'
         });
         const tool = new TestTool('dup');
-        server.register(tool);
-        expect(() => server.register(tool)).toThrow();
+        server.registerTool(tool);
+        expect(() => server.registerTool(tool)).toThrow();
     });
 
     it('executes a registered tool handler', async () => {
@@ -101,7 +103,7 @@ describe('McpToolServer', () => {
             version: '1.0.0'
         });
         const tool = new TestTool('echo');
-        server.register(tool);
+        server.registerTool(tool);
         const registeredTools = (server as any).mcpServer._registeredTools as Record<
             string,
             { handler: Function }
@@ -137,7 +139,7 @@ describe('McpToolServer', () => {
             version: '1.0.0'
         });
         const tool = new TestToolError('failing');
-        server.register(tool);
+        server.registerTool(tool);
         const registeredTools = (server as any).mcpServer._registeredTools as Record<
             string,
             { handler: Function }
@@ -146,6 +148,35 @@ describe('McpToolServer', () => {
         const result = await registered.handler({ input: 'hello' }, {});
         expect(result.isError).toBe(true);
         expect(result.content[0]?.text).toBe('error from failing');
+    });
+
+    it('threads a server observer to tool calls and resource reads', async () => {
+        const onToolCall = vi.fn();
+        const onResourceRead = vi.fn();
+        const server = new StdioMcpServer(
+            { name: 'test-server', version: '1.0.0' },
+            { onToolCall, onResourceRead }
+        );
+        server.registerTool(new TestTool('echo'));
+        const notes = path.resolve('tests/helper/docs/notes.md');
+        server.registerDocument(notes);
+
+        const registeredTools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { handler: Function }
+        >;
+        const toolResult = await registeredTools['echo']!.handler({ input: 'hello' }, {});
+        expect(toolResult.content[0]?.text).toBe('executed echo with hello');
+        expect(onToolCall).toHaveBeenCalledTimes(1);
+
+        const registeredResources = (server as any).mcpServer
+            ._registeredResources as Record<
+            string,
+            { readCallback: (uri: URL) => Promise<unknown> }
+        >;
+        const uri = pathToFileURL(notes).toString();
+        await registeredResources[uri]!.readCallback(new URL(uri));
+        expect(onResourceRead).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -557,7 +588,7 @@ describe('HttpMcpServer', () => {
             version: '1.0.0',
             port: 0
         });
-        server.register(new TestTool('my-tool'));
+        server.registerTool(new TestTool('my-tool'));
         await server.start();
 
         const address = (server as any).expressServer.address();
@@ -708,7 +739,7 @@ describe('HttpMcpServer', () => {
             version: '1.0.0',
             port: 0
         });
-        server.register(new TestTool('shared-tool'));
+        server.registerTool(new TestTool('shared-tool'));
         await server.start();
 
         const address = (server as any).expressServer.address();
@@ -812,7 +843,7 @@ describe('HttpMcpServer', () => {
             version: '1.0.0',
             port: 0
         });
-        server.register(new TestTool('original-tool'));
+        server.registerTool(new TestTool('original-tool'));
         await server.start();
 
         const address = (server as any).expressServer.address();
@@ -903,7 +934,7 @@ describe('HttpMcpServer', () => {
         expect(toolsA).not.toContain('lazy-tool');
 
         // Register new tool after start
-        server.register(new TestTool('lazy-tool'));
+        server.registerTool(new TestTool('lazy-tool'));
 
         // Session A should NOT see the new tool (it was created before registration)
         const toolsAagain = await listTools(sessionA);
@@ -937,5 +968,405 @@ describe('HttpMcpServer', () => {
         await server.start();
         await server.stop();
         await expect(server.stop()).resolves.toBeUndefined();
+    });
+
+    it('destroys keep-alive connections on stop', async () => {
+        const server = new HttpMcpServer({
+            name: 'test-http',
+            version: '1.0.0',
+            port: 0
+        });
+        await server.start();
+        const address = (server as any).expressServer.address();
+        const port: number = address.port;
+
+        const agent = new http.Agent({ keepAlive: true });
+
+        const initBody = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                clientInfo: { name: 'test', version: '1.0' }
+            }
+        });
+
+        const first = await new Promise<{ statusCode: number }>((resolve, reject) => {
+            const req = http.request(
+                `http://localhost:${port}/mcp`,
+                {
+                    method: 'POST',
+                    agent,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json, text/event-stream',
+                        'Content-Length': Buffer.byteLength(initBody)
+                    }
+                },
+                (res) => {
+                    res.resume();
+                    res.on('end', () => resolve({ statusCode: res.statusCode ?? 0 }));
+                    res.on('error', reject);
+                }
+            );
+            req.on('error', reject);
+            req.write(initBody);
+            req.end();
+        });
+        expect(first.statusCode).toBe(200);
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        await server.stop();
+
+        const second = await new Promise<{ ok: boolean }>((resolve) => {
+            const req = http.request(
+                `http://localhost:${port}/mcp`,
+                {
+                    method: 'POST',
+                    agent,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json, text/event-stream',
+                        'Content-Length': Buffer.byteLength(initBody)
+                    }
+                },
+                (res) => {
+                    res.resume();
+                    res.on('end', () => resolve({ ok: true }));
+                    res.on('error', () => resolve({ ok: false }));
+                }
+            );
+            req.on('error', () => resolve({ ok: false }));
+            req.write(initBody);
+            req.end();
+        });
+        expect(second.ok).toBe(false);
+
+        agent.destroy();
+    });
+});
+
+
+describe('tool state (StdioMcpServer)', () => {
+    it('keeps all tools enabled by default', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.registerTool(new TestTool('b'));
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+        expect(tools['b']!.enabled).toBe(true);
+    });
+
+    it('disables the named tools', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.registerTool(new TestTool('b'));
+        server.setDisabledTools(['b']);
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+        expect(tools['b']!.enabled).toBe(false);
+    });
+
+    it('disables all tools when every name is listed', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.registerTool(new TestTool('b'));
+        server.setDisabledTools(['a', 'b']);
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(false);
+        expect(tools['b']!.enabled).toBe(false);
+    });
+
+    it('re-enables previously disabled tools for an empty list', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.registerTool(new TestTool('b'));
+        server.setDisabledTools(['b']);
+        server.setDisabledTools([]);
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+        expect(tools['b']!.enabled).toBe(true);
+    });
+
+    it('ignores unknown tool names without throwing', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        expect(() => server.setDisabledTools(['unknown'])).not.toThrow();
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+    });
+
+    it('disables a single tool live', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.registerTool(new TestTool('b'));
+        server.disableTool('b');
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+        expect(tools['b']!.enabled).toBe(false);
+    });
+
+    it('enables a single tool live', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        server.disableTool('a');
+        server.enableTool('a');
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+    });
+
+    it('ignores unknown names for single-tool toggles', () => {
+        const server = new StdioMcpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+        server.registerTool(new TestTool('a'));
+        expect(() => server.disableTool('unknown')).not.toThrow();
+        const tools = (server as any).mcpServer._registeredTools as Record<
+            string,
+            { enabled: boolean }
+        >;
+        expect(tools['a']!.enabled).toBe(true);
+    });
+});
+
+describe('tool state (HttpMcpServer)', () => {
+    const initBody = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1.0' }
+        }
+    });
+
+    async function startServer(): Promise<{ server: HttpMcpServer; port: number }> {
+        const server = new HttpMcpServer({
+            name: 'test-http',
+            version: '1.0.0',
+            port: 0
+        });
+        server.registerTool(new TestTool('shared-tool'));
+        server.registerTool(new TestTool('other-tool'));
+        await server.start();
+        const address = (server as any).expressServer.address();
+        return { server, port: address.port };
+    }
+
+    async function createSession(port: number): Promise<string> {
+        return await new Promise<string>((resolve, reject) => {
+            const req = http.request(
+                `http://localhost:${port}/mcp`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json, text/event-stream',
+                        'Content-Length': Buffer.byteLength(initBody)
+                    }
+                },
+                (res) => {
+                    const sessionId = res.headers['mcp-session-id'] as string;
+                    res.on('data', () => {});
+                    res.on('end', () => resolve(sessionId));
+                    res.on('error', reject);
+                }
+            );
+            req.on('error', reject);
+            req.write(initBody);
+            req.end();
+        });
+    }
+
+    async function listTools(port: number, sessionId: string): Promise<string> {
+        const body = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/list',
+            params: {}
+        });
+        return await new Promise<string>((resolve, reject) => {
+            const req = http.request(
+                `http://localhost:${port}/mcp`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json, text/event-stream',
+                        'Mcp-Session-Id': sessionId,
+                        'Mcp-Protocol-Version': '2025-03-26',
+                        'Content-Length': Buffer.byteLength(body)
+                    }
+                },
+                (res) => {
+                    let data = '';
+                    res.on('data', (chunk: string) => {
+                        data += chunk;
+                    });
+                    res.on('end', () => resolve(data));
+                    res.on('error', reject);
+                }
+            );
+            req.on('error', reject);
+            req.write(body);
+            req.end();
+        });
+    }
+
+    async function callTool(port: number, sessionId: string, name: string): Promise<string> {
+        const body = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 3,
+            method: 'tools/call',
+            params: { name, arguments: { input: 'x' } }
+        });
+        return await new Promise<string>((resolve, reject) => {
+            const req = http.request(
+                `http://localhost:${port}/mcp`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json, text/event-stream',
+                        'Mcp-Session-Id': sessionId,
+                        'Mcp-Protocol-Version': '2025-03-26',
+                        'Content-Length': Buffer.byteLength(body)
+                    }
+                },
+                (res) => {
+                    let data = '';
+                    res.on('data', (chunk: string) => {
+                        data += chunk;
+                    });
+                    res.on('end', () => resolve(data));
+                    res.on('error', reject);
+                }
+            );
+            req.on('error', reject);
+            req.write(body);
+            req.end();
+        });
+    }
+
+    it('updates existing sessions live', async () => {
+        const { server, port } = await startServer();
+        const sessionId = await createSession(port);
+
+        let body = await listTools(port, sessionId);
+        expect(body).toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        server.setDisabledTools(['shared-tool']);
+        body = await listTools(port, sessionId);
+        expect(body).not.toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        server.setDisabledTools([]);
+        body = await listTools(port, sessionId);
+        expect(body).toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        await server.stop();
+    });
+
+    it('applies to sessions created after the call', async () => {
+        const { server, port } = await startServer();
+        server.setDisabledTools(['shared-tool']);
+
+        const sessionId = await createSession(port);
+        const body = await listTools(port, sessionId);
+        expect(body).not.toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        await server.stop();
+    });
+
+    it('updates all concurrent sessions', async () => {
+        const { server, port } = await startServer();
+        const sessionA = await createSession(port);
+        const sessionB = await createSession(port);
+
+        server.setDisabledTools(['shared-tool']);
+        const bodyA = await listTools(port, sessionA);
+        const bodyB = await listTools(port, sessionB);
+        expect(bodyA).not.toContain('shared-tool');
+        expect(bodyB).not.toContain('shared-tool');
+
+        await server.stop();
+    });
+
+    it('rejects calls to disabled tools in existing sessions', async () => {
+        const { server, port } = await startServer();
+        const sessionId = await createSession(port);
+        server.setDisabledTools(['shared-tool']);
+
+        const body = await callTool(port, sessionId, 'shared-tool');
+        expect(body).toContain('disabled');
+
+        await server.stop();
+    });
+
+    it('applies single-tool toggles to existing sessions live', async () => {
+        const { server, port } = await startServer();
+        const sessionId = await createSession(port);
+
+        server.disableTool('shared-tool');
+        let body = await listTools(port, sessionId);
+        expect(body).not.toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        server.enableTool('shared-tool');
+        body = await listTools(port, sessionId);
+        expect(body).toContain('shared-tool');
+        expect(body).toContain('other-tool');
+
+        await server.stop();
     });
 });

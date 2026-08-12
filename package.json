@@ -1,8 +1,9 @@
 {
     "name": "@johannes.latzel/llm-chat-mcp",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "MCP server for llm-chat Tool packages",
     "license": "MIT",
+    "sideEffects": false,
     "files": [
         "dist/",
         "README.md",
@@ -24,7 +25,7 @@
         "tool"
     ],
     "engines": {
-        "node": ">=18"
+        "node": ">=20"
     },
     "publishConfig": {
         "access": "public"
@@ -49,7 +50,10 @@
         "test:coverage": "vitest run --coverage",
         "clean:pack": "rm -rf node_modules dist/ package-lock.json && npm cache clean --force && npm install && npm run verify && npm run build && npm pack",
         "clean:install": "rm -rf node_modules dist/ package-lock.json && npm cache clean --force && npm install && npm run verify",
-        "prepare": "husky"
+        "prepare": "husky",
+        "audit": "npm audit --audit-level=high",
+        "prebuild": "rm -rf dist/",
+        "prepack": "npm run build"
     },
     "lint-staged": {
         "src/**/*.ts": [
@@ -59,7 +63,7 @@
         ]
     },
     "dependencies": {
-        "@johannes.latzel/llm-chat": "^0.6.0",
+        "@johannes.latzel/llm-chat": "^0.7.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "async-mutex": "^0.5.0",
         "express": "^5.2.1",

@@ -1,9 +1,9 @@
 import { StdioMcpServer } from '../index.js';
-import { NoParamTool } from './no-param-tool.js';
+import path from 'node:path';
 
 const server = new StdioMcpServer({
-    name: 'no-params-server',
+    name: 'doc-server',
     version: '1.0.0'
 });
-server.registerTool(new NoParamTool());
+server.registerFolder(path.resolve('tests/helper/docs'));
 await server.start();

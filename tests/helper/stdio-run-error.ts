@@ -4,5 +4,5 @@ const server = new StdioMcpServer({
     name: 'error-server',
     version: '1.0.0'
 });
-server.register(new ErrorTool());
+server.registerTool(new ErrorTool());
 await server.start();

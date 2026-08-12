@@ -5,5 +5,5 @@ const server = new HttpMcpServer({
     version: '1.0.0',
     port: 8081
 });
-server.register(new GreetTool());
+server.registerTool(new GreetTool());
 await server.start();

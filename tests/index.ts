@@ -8,3 +8,4 @@ export {
     type ServerInfo,
     type HttpServerInfo
 } from '../src/mcp/mcp-server.js';
+export { ToolRegistry, type ToolState } from '../src/mcp/tool-registry.js';

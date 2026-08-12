@@ -6,7 +6,7 @@ content entry. Sets `isError: true` when any result has a non-success status.
 See [`src/lib/result-converter.ts`](../../src/lib/result-converter.ts) for the
 full signature.
 
-Called by [`BaseMcpServer.register()`](../servers/base.md#register) in the tool
+Called by [`BaseMcpServer.registerTool()`](../servers/base.md#registertoolitem) in the tool
 handler closure.
 
 [llm-chat]: https://johanneslatzel.github.io/llm-chat/

@@ -19,11 +19,11 @@ Supports:
 Recursively handles required/optional fields and `description` annotations.
 Throws on unknown types.
 
-Called by [`BaseMcpServer.register()`](../servers/base.md#register) for every
+Called by [`BaseMcpServer.registerTool()`](../servers/base.md#registertoolitem) for every
 registered tool.
 
 ---
 
 See also: [`toolResultsToMcp`](result-converter.md),
-[Architecture](../architecture.md#toolSchemaToZod-schema-converterts),
+[Architecture](../architecture.md#toolschematozod-schema-converterts),
 [Servers](../servers/index.md)

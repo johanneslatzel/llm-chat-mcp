@@ -12,13 +12,15 @@ session. Extends [`BaseMcpServer`](base.md). See
 
 ## `start()`
 
-Binds Express to the configured port. Idempotent — subsequent calls are no-ops
+Binds Express to the configured port. Idempotent: subsequent calls are no-ops
 while the server is already listening.
 
 ## `stop()`
 
 Closes all active HTTP sessions (each transport is closed), clears the session
-map, then stops the Express listener.
+map, then stops the Express listener and destroys all remaining connections,
+including idle keep-alive and open SSE sockets, so the process can shut down
+and the port is fully released. Idempotent; safe to call when not running.
 
 ## Request routing (`/mcp`)
 
@@ -30,17 +32,18 @@ map, then stops the Express listener.
 | POST   | missing           | [Create a new session]    |
 | GET    | present           | Route to existing session |
 | GET    | missing           | 400                       |
-| Other  | —                 | 400                       |
+| Other  | missing           | 400                       |
+| Other  | present           | Route to existing session; the SDK rejects unsupported methods |
 
 [Disconnect that session]: #lifecycle
 [Create a new session]: #lifecycle
 
 ## Lifecycle
 
-1. `constructor(info)` — initialises Express app and wires routes
-2. `register(item)` — tools must be registered **before** `start()` (they are
+1. `constructor(info)`: initialises Express app and wires routes
+2. `registerTool(item)`: tools must be registered **before** `start()` (they are
    copied into each per-session `McpServer` at creation time)
-3. `start()` — begins listening on the configured port
+3. `start()`: begins listening on the configured port
 4. Client sends `POST /mcp` (initialize) → `handleCreateSession` creates a
    transport, connects a fresh `McpServer` (via
    [`createFreshMcpServer()`](base.md#createfreshmcpserver-protected)), stores
@@ -49,7 +52,8 @@ map, then stops the Express listener.
    `handleExistingSession`
 6. `DELETE /mcp` → `handleDelete` removes and closes the session
 7. `stop()` → [`onStop()`](base.md#onstop-protected) snapshots and clears all
-   sessions, closes each transport, then stops Express
+   sessions, closes each transport, then stops Express and destroys any
+   lingering keep-alive/SSE connections
 
 ## Types
 

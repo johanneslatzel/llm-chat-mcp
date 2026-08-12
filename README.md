@@ -19,12 +19,14 @@ or Streamable HTTP.
 
 - **Stdio** and **Streamable HTTP** transports
 - Register any `Tool` or `ToolPackage` from the llm-chat ecosystem
-- Multi-session HTTP — each client gets an isolated MCP session
+- Serve **documents as MCP resources** - register a file or an entire folder
+  (every supported type by default) and clients can list and read them
+- Multi-session HTTP - each client gets an isolated MCP session
 - Automatic JSON Schema → Zod conversion for input validation
 
 ## Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20
 
 ## Installation
 
@@ -38,7 +40,7 @@ Full documentation at **[johanneslatzel.github.io/llm-chat-mcp/](https://johanne
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
 
 ## Contributing
 
