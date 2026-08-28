@@ -267,7 +267,6 @@ describe('ToolRegistry', () => {
     });
 });
 
-
 describe('McpServerObserver', () => {
     it('reports successful tool calls to the observer', async () => {
         const onToolCall = vi.fn();

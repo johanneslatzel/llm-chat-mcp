@@ -1,4 +1,4 @@
-# `toolSchemaToZod`
+# toolSchemaToZod
 
 Converts the JSON Schema output from `Tool.toOpenAI().function.parameters` into
 a Zod object schema that the MCP SDK uses for input validation. See

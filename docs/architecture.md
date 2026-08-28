@@ -20,6 +20,10 @@ BaseMcpServer  (abstract)
 
 - Stores the `serverInfo` metadata and a `ToolRegistry` inventory of registered
   tools plus their enable/disable state
+- [`hook()`](servers/base.md#hook) returns a builder for lifecycle hooks
+  (`started`, `toolRegistered`, `documentRegistered`); `HttpMcpServer` adds the
+  `sessionCreated` / `sessionDisposed` events. Callbacks run fire-and-forget
+  with errors caught and logged (see [Hooks](hooks.md))
 - [`registerTool(item)`](servers/base.md#registertoolitem) stores the item and
   registers its tools on the SDK's `McpServer`
 - [`setDisabledTools(names)`](servers/base.md#setdisabledtoolsnames) replaces
@@ -27,13 +31,9 @@ BaseMcpServer  (abstract)
   [`disableTool(name)`](servers/base.md#disabletoolname) and
   [`enableTool(name)`](servers/base.md#enabletoolname) toggle single tools
 - [`registerDocument`](servers/base.md#registerdocumentpathorconfig) registers a single file
-  as a static MCP resource; [`registerFolder`](servers/base.md#registerfolderpathorconfig)
-  registers every matching file in a folder (recursively) as static resources.
+- [`registerContentDocument`](servers/base.md#registercontentdocumentconfig) registers
+  an in-memory string or provider as a dynamic resource at a `content://` URI.
   See [Document Resources](resources.md)
-- [`createFreshMcpServer()`](servers/base.md#createfreshmcpserver-protected)
-  creates a brand-new `McpServer` with all previously registered tools and
-  documents replayed, used by `HttpMcpServer` to give each HTTP session its own
-  isolated server instance
 - [`stop()`](servers/base.md#stop) calls the `onStop()` lifecycle hook then
   closes the server
 - Subclasses implement `start()` to connect their transport
@@ -51,26 +51,39 @@ BaseMcpServer  (abstract)
 - **Multi-session architecture**: each HTTP client gets its own
   `(StreamableHTTPServerTransport, McpServer)` pair, keyed by the
   `Mcp-Session-Id` header
+- **Session-scoped tools**: an optional `SessionToolFactory` (see
+  [`SessionToolFactory`](servers/http.md#sessiontoolfactory--sessiontoolset))
+  produces a fresh `SessionToolSet` per session: tool instances that carry
+  session-independent state (e.g. a dedicated workspace root). The tool set's
+  `dispose()` hook releases that state when the session ends. Without a
+  factory, sessions only share the inventory in `ToolRegistry`.
 - Session map access is protected by an `async-mutex` `Mutex` to prevent
   concurrent modification from overlapping requests (see
   [`HttpMcpServer`](servers/http.md) for the full reference)
 
 #### Request routing (`/mcp`)
 
-| Method | Session ID header | Action                    |
-| ------ | ----------------- | ------------------------- |
-| DELETE | present           | Disconnect that session   |
-| DELETE | missing           | 404                       |
-| POST   | present           | Route to existing session |
-| POST   | missing           | Create a new session      |
-| GET    | present           | Route to existing session |
-| GET    | missing           | 400                       |
-| Other  | missing           | 400                       |
+| Method | Session ID header | Action                                                         |
+| ------ | ----------------- | -------------------------------------------------------------- |
+| DELETE | present           | Disconnect that session                                        |
+| DELETE | missing           | 404                                                            |
+| POST   | present           | Route to existing session                                      |
+| POST   | missing           | Create a new session (or answer a `server/discover` probe)     |
+| GET    | present           | Route to existing session                                      |
+| GET    | missing           | 400                                                            |
+| Other  | missing           | 400                                                            |
 | Other  | present           | Route to existing session; the SDK rejects unsupported methods |
+
+A session-less `POST /mcp` with JSON-RPC method `server/discover` is answered
+with HTTP 200 + JSON-RPC `-32601` (Method not found) before a transport is
+created, so modern clients fall back to the legacy initialize handshake without
+spawning a session (see [`src/mcp/discovery-probe.ts`](../src/mcp/discovery-probe.ts)).
+Non-probe POSTs are replayed byte-identically into the initialize path.
 
 #### Lifecycle
 
-1. `constructor(info)`: initialises Express app and wires routes
+1. `constructor(info, observer?, sessionToolFactory?)`: initialises Express app
+   and wires routes
 2. `registerTool(item)`: tools must be registered **before** `start()` (they are
    copied into each per-session `McpServer` at creation time)
 3. `start()`: begins listening on the configured port
@@ -80,8 +93,8 @@ BaseMcpServer  (abstract)
 5. Subsequent requests include `Mcp-Session-Id` → routed via
    `handleExistingSession`
 6. `DELETE /mcp` → `handleDelete` removes and closes the session
-7. `stop()` → `onStop()` snapshots and clears all sessions, closes each
-   transport, then stops Express
+7. `stop()` → `onStop()` snapshots and clears all sessions, disposes each
+   session tool set, closes each transport, then stops Express
 
 ## Tool model and per-server views
 
@@ -131,13 +144,28 @@ Recursively collects every file in a folder matching the configured extensions
 named by its path relative to the folder root. A folder with no matches
 registers nothing.
 
+### [`registerContentDocumentOnServer`](resources.md) (document-resource.ts)
+
+Registers an in-memory string or provider function as a dynamic resource at a
+`content://` URI. The content is fetched on every `resources/read`, so providers
+can regenerate output dynamically. Errors thrown inside the provider are wrapped
+in an MCP error and reported to the observer.
+
+### `DocumentKind` enum (document-resource.ts)
+
+Discriminator for the `DocumentEntry` union (`FileEntry | FolderEntry |
+ContentEntry`). Values: `File`, `Folder`, `Content`. Used in
+`createFreshMcpServer()` to replay the correct registration for each entry.
+
 See [`src/mcp/document-resource.ts`](../src/mcp/document-resource.ts).
 
 ## Public API surface
 
 All public exports come from `src/index.ts`; the `lib/` converters and the
-`McpSession` and `DocumentEntry` types are internal. `FileDocumentConfig` and
-`FolderDocumentConfig` are exported for typed registration.
+`McpSession` and `DocumentEntry` types are internal. `FileDocumentConfig`,
+`FolderDocumentConfig`, `ContentDocumentConfig`, `DocumentKind`,
+`SessionToolSet`, and `SessionToolFactory` are exported for typed registration
+and session-scoped tool sets.
 
 ## Dependencies
 
@@ -152,6 +180,6 @@ All public exports come from `src/index.ts`; the `lib/` converters and the
 ---
 
 See also: [Servers](servers/index.md), [Converters](converters/index.md),
-[Document Resources](resources.md), [Quick Start](quickstart.md)
+[Document Resources](resources.md), [Quickstart](quickstart.md)
 
 [mcp]: https://modelcontextprotocol.io

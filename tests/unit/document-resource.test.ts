@@ -206,6 +206,110 @@ describe('registerFolder', () => {
     });
 });
 
+describe('registerContentDocument', () => {
+    it('registers a static string as a resource', async () => {
+        const server = new StdioMcpServer({ name: 'doc', version: '1.0.0' });
+        server.registerContentDocument({ name: 'greeting', content: 'hello world' });
+
+        const resources = resourcesOf(server);
+        const uri = 'content://greeting';
+        expect(Object.keys(resources)).toEqual([uri]);
+
+        const resource = resources[uri]!;
+        expect(resource.name).toBe('greeting');
+        expect(resource.metadata.mimeType).toBe('text/markdown');
+
+        const result = await resource.readCallback(new URL(uri));
+        expect(result.contents[0]?.uri).toBe(uri);
+        expect(result.contents[0]?.mimeType).toBe('text/markdown');
+        expect(result.contents[0]?.text).toBe('hello world');
+    });
+
+    it('calls a provider function on every read', async () => {
+        let callCount = 0;
+        const server = new StdioMcpServer({ name: 'doc', version: '1.0.0' });
+        server.registerContentDocument({
+            name: 'counter',
+            content: () => `count: ${++callCount}`
+        });
+
+        const resource = Object.values(resourcesOf(server))[0]!;
+        const r1 = await resource.readCallback(new URL('content://counter'));
+        expect(r1.contents[0]?.text).toBe('count: 1');
+        const r2 = await resource.readCallback(new URL('content://counter'));
+        expect(r2.contents[0]?.text).toBe('count: 2');
+    });
+
+    it('supports async provider functions', async () => {
+        const server = new StdioMcpServer({ name: 'doc', version: '1.0.0' });
+        server.registerContentDocument({
+            name: 'async',
+            content: async () => 'async content'
+        });
+
+        const resource = Object.values(resourcesOf(server))[0]!;
+        const result = await resource.readCallback(new URL('content://async'));
+        expect(result.contents[0]?.text).toBe('async content');
+    });
+
+    it('supports title, description and mimeType overrides', async () => {
+        const server = new StdioMcpServer({ name: 'doc', version: '1.0.0' });
+        server.registerContentDocument({
+            name: 'custom',
+            content: 'data',
+            title: 'Custom Title',
+            description: 'A custom description',
+            mimeType: 'text/yaml'
+        });
+
+        const resource = Object.values(resourcesOf(server))[0]!;
+        expect(resource.name).toBe('custom');
+        expect(resource.metadata.title).toBe('Custom Title');
+        expect(resource.metadata.description).toBe('A custom description');
+        expect(resource.metadata.mimeType).toBe('text/yaml');
+    });
+
+    it('reports observer on successful read', async () => {
+        const onResourceRead = vi.fn();
+        const server = new StdioMcpServer(
+            { name: 'doc', version: '1.0.0' },
+            { onToolCall: vi.fn(), onResourceRead }
+        );
+        server.registerContentDocument({ name: 'obs', content: 'observed' });
+
+        const resource = Object.values(resourcesOf(server))[0]!;
+        await resource.readCallback(new URL('content://obs'));
+        expect(onResourceRead).toHaveBeenCalledTimes(1);
+        const info = onResourceRead.mock.calls[0]![0];
+        expect(info.uri).toBe('content://obs');
+        expect(info.ok).toBe(true);
+        expect(info.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('reports observer and throws McpError when provider fails', async () => {
+        const onResourceRead = vi.fn();
+        const server = new StdioMcpServer(
+            { name: 'doc', version: '1.0.0' },
+            { onToolCall: vi.fn(), onResourceRead }
+        );
+        server.registerContentDocument({
+            name: 'fail',
+            content: () => {
+                throw new Error('provider error');
+            }
+        });
+
+        const resource = Object.values(resourcesOf(server))[0]!;
+        await expect(resource.readCallback(new URL('content://fail'))).rejects.toBeInstanceOf(
+            McpError
+        );
+        expect(onResourceRead).toHaveBeenCalledTimes(1);
+        const info = onResourceRead.mock.calls[0]![0];
+        expect(info.uri).toBe('content://fail');
+        expect(info.ok).toBe(false);
+    });
+});
+
 describe('createFreshMcpServer', () => {
     it('replays registered documents into fresh servers', async () => {
         const dir = makeTempDir();
@@ -215,6 +319,7 @@ describe('createFreshMcpServer', () => {
         const server = new HttpMcpServer({ name: 'http-doc', version: '1.0.0', port: 0 });
         server.registerDocument(standalone);
         server.registerFolder(DOCS_DIR);
+        server.registerContentDocument({ name: 'dynamic', content: 'in-memory' });
 
         const fresh = (server as any).createFreshMcpServer() as {
             mcpServer: { _registeredResources: Record<string, Resource> };
@@ -222,10 +327,15 @@ describe('createFreshMcpServer', () => {
         const names = Object.values(fresh.mcpServer._registeredResources)
             .map((r) => r.name)
             .sort();
-        expect(names).toEqual(['ignore.txt', 'notes.md', 'standalone.md', 'sub/guide.md']);
+        expect(names).toEqual([
+            'dynamic',
+            'ignore.txt',
+            'notes.md',
+            'standalone.md',
+            'sub/guide.md'
+        ]);
     });
 });
-
 
 describe('McpServerObserver resource reads', () => {
     it('reports successful resource reads', async () => {

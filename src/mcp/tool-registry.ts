@@ -1,7 +1,6 @@
 import { Tool, ToolPackage } from '@johannes.latzel/llm-chat';
 import type { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toolSchemaToZod } from '../lib/schema-converter.js';
-import { toolResultsToMcp } from '../lib/result-converter.js';
+import { registerToolOnServer } from './tool-registration.js';
 import type { McpServerObserver } from './observer.js';
 
 /** One registered tool together with its current enable state. */
@@ -108,34 +107,6 @@ export class ToolRegistry {
     }
 
     private registerOne(server: McpServer, tool: Tool): RegisteredTool {
-        const zodSchema = toolSchemaToZod(tool);
-        return server.registerTool(
-            tool.name,
-            {
-                description: tool.description,
-                inputSchema: zodSchema
-            },
-            async (args: Record<string, unknown>) => {
-                const started = Date.now();
-                try {
-                    const results = await tool.execute(args);
-                    this.observer?.onToolCall({
-                        name: tool.name,
-                        args,
-                        result: results,
-                        durationMs: Date.now() - started
-                    });
-                    return toolResultsToMcp(results);
-                } catch (error) {
-                    this.observer?.onToolCall({
-                        name: tool.name,
-                        args,
-                        error: error instanceof Error ? error.message : String(error),
-                        durationMs: Date.now() - started
-                    });
-                    throw error;
-                }
-            }
-        );
+        return registerToolOnServer(server, tool, this.observer);
     }
 }

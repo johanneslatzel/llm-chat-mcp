@@ -34,9 +34,30 @@ export type FolderDocumentConfig = {
     extensions?: string[];
 };
 
+/** Configuration for registering in-memory content as an MCP resource. */
+export type ContentDocumentConfig = {
+    /** Unique resource name. Used as the MCP resource name and in the URI. */
+    name: string;
+    /** Content: a static string, or a provider called on every read. */
+    content: string | (() => string | Promise<string>);
+    /** Resource title shown by clients. */
+    title?: string;
+    /** Resource description shown by clients. */
+    description?: string;
+    /** MIME type. Defaults to `'text/markdown'`. */
+    mimeType?: string;
+};
+
+/** Discriminator for registered document entry kinds. */
+export enum DocumentKind {
+    File = 'file',
+    Folder = 'folder',
+    Content = 'content'
+}
+
 /** Internal, normalized representation of a registered file document. */
 export type FileEntry = {
-    kind: 'file';
+    kind: DocumentKind.File;
     path: string;
     name: string;
     title?: string;
@@ -46,7 +67,7 @@ export type FileEntry = {
 
 /** Internal, normalized representation of a registered folder document. */
 export type FolderEntry = {
-    kind: 'folder';
+    kind: DocumentKind.Folder;
     path: string;
     title?: string;
     description?: string;
@@ -54,8 +75,18 @@ export type FolderEntry = {
     extensions: string[];
 };
 
-/** Union of the two internal document entries. */
-export type DocumentEntry = FileEntry | FolderEntry;
+/** Internal, normalized representation of a registered in-memory content document. */
+export type ContentEntry = {
+    kind: DocumentKind.Content;
+    name: string;
+    content: string | (() => string | Promise<string>);
+    title?: string;
+    description?: string;
+    mimeType: string;
+};
+
+/** Union of all internal document entry kinds. */
+export type DocumentEntry = FileEntry | FolderEntry | ContentEntry;
 
 const MIME_TYPES: Record<string, string> = {
     md: 'text/markdown',
@@ -137,7 +168,7 @@ export function createDocumentEntry(config: FileDocumentConfig): FileEntry {
         throw new Error(`Document path is not a file: ${absPath}`);
     }
     return {
-        kind: 'file',
+        kind: DocumentKind.File,
         path: absPath,
         name: config.name ?? path.basename(absPath),
         ...(config.title !== undefined ? { title: config.title } : {}),
@@ -154,7 +185,7 @@ export function createFolderEntry(config: FolderDocumentConfig): FolderEntry {
         throw new Error(`Folder path is not a directory: ${absPath}`);
     }
     return {
-        kind: 'folder',
+        kind: DocumentKind.Folder,
         path: absPath,
         extensions: normalizeExtensions(config.extensions),
         ...(config.title !== undefined ? { title: config.title } : {}),
@@ -163,7 +194,19 @@ export function createFolderEntry(config: FolderDocumentConfig): FolderEntry {
     };
 }
 
-/** Build the `ResourceMetadata` for a resource, inferring the MIME type unless overridden. */
+/** Create a normalized content entry from a config. */
+export function createContentEntry(config: ContentDocumentConfig): ContentEntry {
+    return {
+        kind: DocumentKind.Content,
+        name: config.name,
+        content: config.content,
+        ...(config.title !== undefined ? { title: config.title } : {}),
+        ...(config.description !== undefined ? { description: config.description } : {}),
+        mimeType: config.mimeType ?? 'text/markdown'
+    };
+}
+
+/** Build the `ResourceMetadata` for a file or folder resource, inferring the MIME type unless overridden. */
 function buildMetadata(entry: {
     path: string;
     title?: string;
@@ -234,7 +277,7 @@ export function registerFolderResourcesOnServer(
         registerFileResourceOnServer(
             mcpServer,
             {
-                kind: 'file',
+                kind: DocumentKind.File,
                 path: file,
                 name: path.relative(entry.path, file).split(path.sep).join('/'),
                 ...(entry.title !== undefined ? { title: entry.title } : {}),
@@ -244,4 +287,45 @@ export function registerFolderResourcesOnServer(
             observer
         );
     }
+}
+
+/** Register an in-memory content string or provider as an MCP resource. */
+export function registerContentDocumentOnServer(
+    mcpServer: McpServer,
+    entry: ContentEntry,
+    observer?: McpServerObserver
+): void {
+    const uri = `content://${entry.name}`;
+    const metadata: ResourceMetadata = { mimeType: entry.mimeType };
+    if (entry.title !== undefined) {
+        metadata.title = entry.title;
+    }
+    if (entry.description !== undefined) {
+        metadata.description = entry.description;
+    }
+    mcpServer.registerResource(entry.name, uri, metadata, async (requestedUri) => {
+        const started = Date.now();
+        try {
+            const text =
+                typeof entry.content === 'function' ? await entry.content() : entry.content;
+            observer?.onResourceRead({
+                uri: requestedUri.toString(),
+                ok: true,
+                durationMs: Date.now() - started
+            });
+            return {
+                contents: [{ uri: requestedUri.toString(), mimeType: entry.mimeType, text }]
+            };
+        } catch {
+            observer?.onResourceRead({
+                uri: requestedUri.toString(),
+                ok: false,
+                durationMs: Date.now() - started
+            });
+            throw new McpError(
+                ErrorCode.InvalidParams,
+                `Failed to read resource ${requestedUri.toString()}`
+            );
+        }
+    });
 }

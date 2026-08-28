@@ -1,4 +1,4 @@
-# `StdioMcpServer`
+# StdioMcpServer
 
 MCP server over standard input/output. Extends [`BaseMcpServer`](base.md).
 See [`src/mcp/mcp-server.ts`](../../src/mcp/mcp-server.ts) for the full
@@ -15,4 +15,4 @@ Claude Desktop).
 ---
 
 See also: [`BaseMcpServer`](base.md), [`HttpMcpServer`](http.md),
-[Quick Start](../quickstart.md)
+[Quickstart](../quickstart.md)

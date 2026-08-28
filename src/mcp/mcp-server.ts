@@ -10,15 +10,32 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import { Mutex } from 'async-mutex';
 import {
+    createContentEntry,
     createDocumentEntry,
     createFolderEntry,
+    ContentDocumentConfig,
     DocumentEntry,
+    DocumentKind,
     FileDocumentConfig,
     FolderDocumentConfig,
+    registerContentDocumentOnServer,
     registerFileResourceOnServer,
     registerFolderResourcesOnServer
 } from './document-resource.js';
 import type { McpServerObserver } from './observer.js';
+import { registerToolOnServer } from './tool-registration.js';
+import type { SessionToolFactory, SessionToolSet } from './session-tools.js';
+import {
+    DISCOVER_METHOD,
+    inspectSessionlessPost,
+    respondMethodNotFound
+} from './discovery-probe.js';
+import {
+    HttpServerHookBuilder,
+    McpServerHookBuilder,
+    ServerEvent,
+    ServerHookEmitter
+} from '../hooks/server-hooks.js';
 
 /** Metadata passed to the MCP protocol on connect. */
 export type ServerInfo = {
@@ -41,7 +58,8 @@ export type HttpServerInfo = ServerInfo & {
 export abstract class BaseMcpServer {
     private mcpServer: McpServer;
     protected serverInfo: ServerInfo;
-    private readonly observer: McpServerObserver | undefined;
+    /** Observer notified about tool calls and resource reads; shared by base server and every session. */
+    protected readonly observer: McpServerObserver | undefined;
     protected _registeredDocuments: DocumentEntry[] = [];
     /**
      * The tool model: every registered llm-chat `Tool` plus the disabled-tool
@@ -60,6 +78,8 @@ export abstract class BaseMcpServer {
      * the base server is never connected, so this map is bookkeeping only.
      */
     private baseToolHandles = new Map<string, RegisteredTool>();
+    /** Emitter backing the {@link hook} builder; fires lifecycle events. */
+    protected readonly hookEmitter = new ServerHookEmitter();
 
     constructor(serverInfo: ServerInfo, observer?: McpServerObserver) {
         this.serverInfo = serverInfo;
@@ -78,10 +98,21 @@ export abstract class BaseMcpServer {
         const handles = this.tools.registerOn(this.mcpServer, item);
         for (const [name, registered] of handles) {
             this.baseToolHandles.set(name, registered);
+            this.hookEmitter.emit(ServerEvent.ToolRegistered, name);
         }
         // A tool registered after being listed in the disabled set must start
         // disabled on the base server.
         this.tools.applyEnabledStateTo(this.baseToolHandles);
+    }
+
+    /**
+     * Access lifecycle hooks: `started`, `toolRegistered`,
+     * `documentRegistered`, and on HTTP servers `sessionCreated` /
+     * `sessionDisposed`. Each builder's `do(callback)` registers the callback
+     * and returns a disposable {@link Hook}.
+     */
+    hook(): McpServerHookBuilder {
+        return new McpServerHookBuilder(this.hookEmitter);
     }
 
     /**
@@ -98,6 +129,10 @@ export abstract class BaseMcpServer {
         );
         this._registeredDocuments.push(entry);
         registerFileResourceOnServer(this.mcpServer, entry, this.observer);
+        this.hookEmitter.emit(ServerEvent.DocumentRegistered, {
+            kind: entry.kind,
+            name: entry.name
+        });
     }
 
     /**
@@ -115,21 +150,22 @@ export abstract class BaseMcpServer {
         );
         this._registeredDocuments.push(entry);
         registerFolderResourcesOnServer(this.mcpServer, entry, this.observer);
+        this.hookEmitter.emit(ServerEvent.DocumentRegistered, { kind: entry.kind });
     }
 
-    /** Create a fresh McpServer with all registered tools and documents, applying the disabled-tool set. */
-    protected createFreshMcpServer(): { mcpServer: McpServer; tools: Map<string, RegisteredTool> } {
-        const mcpServer = new McpServer(this.serverInfo);
-        const tools = this.tools.registerAllOn(mcpServer);
-        for (const entry of this._registeredDocuments) {
-            if (entry.kind === 'file') {
-                registerFileResourceOnServer(mcpServer, entry, this.observer);
-            } else {
-                registerFolderResourcesOnServer(mcpServer, entry, this.observer);
-            }
-        }
-        this.tools.applyEnabledStateTo(tools);
-        return { mcpServer, tools };
+    /**
+     * Register an in-memory content string or provider as an MCP resource.
+     * The content is served from RAM on every `resources/read` — no file on
+     * disk is involved. The resource URI uses the `content://` scheme.
+     */
+    registerContentDocument(config: ContentDocumentConfig): void {
+        const entry = createContentEntry(config);
+        this._registeredDocuments.push(entry);
+        registerContentDocumentOnServer(this.mcpServer, entry, this.observer);
+        this.hookEmitter.emit(ServerEvent.DocumentRegistered, {
+            kind: entry.kind,
+            name: entry.name
+        });
     }
 
     /**
@@ -187,6 +223,7 @@ export abstract class BaseMcpServer {
 export class StdioMcpServer extends BaseMcpServer {
     async start(): Promise<void> {
         await this.connect(new StdioServerTransport());
+        this.hookEmitter.emit(ServerEvent.Started);
     }
 }
 
@@ -199,6 +236,8 @@ type McpSession = {
     transport: StreamableHTTPServerTransport;
     mcpServer: McpServer;
     tools: Map<string, RegisteredTool>;
+    /** Session-scoped tool set from the factory, disposed when the session ends. */
+    sessionToolSet?: SessionToolSet;
 };
 
 export class HttpMcpServer extends BaseMcpServer {
@@ -207,15 +246,79 @@ export class HttpMcpServer extends BaseMcpServer {
     private port: number;
     private sessions: Map<string, McpSession>;
     private mutex;
+    private readonly sessionToolFactory: SessionToolFactory | undefined;
 
-    constructor(serverInfo: HttpServerInfo, observer?: McpServerObserver) {
+    constructor(
+        serverInfo: HttpServerInfo,
+        observer?: McpServerObserver,
+        sessionToolFactory?: SessionToolFactory
+    ) {
         super(serverInfo, observer);
         this.port = serverInfo.port;
         this.expressServer = null;
         this.sessions = new Map();
         this.expressApp = express();
         this.mutex = new Mutex();
+        this.sessionToolFactory = sessionToolFactory;
         this.expressApp.all('/mcp', (req, res) => this.handleMcpRequest(req, res));
+    }
+
+    /**
+     * Access lifecycle hooks including the HTTP session events
+     * (`sessionCreated` / `sessionDisposed`). Each builder's `do(callback)`
+     * registers the callback and returns a disposable {@link Hook}.
+     */
+    override hook(): HttpServerHookBuilder {
+        return new HttpServerHookBuilder(this.hookEmitter);
+    }
+
+    /**
+     * Create a fresh McpServer for a new HTTP session: registers the shared
+     * tool inventory plus, when a {@link SessionToolFactory} is configured,
+     * the session-scoped tool set produced by the factory. Documents and the
+     * disabled-tool policy are applied to the fresh server.
+     */
+    private createFreshMcpServer(): {
+        mcpServer: McpServer;
+        tools: Map<string, RegisteredTool>;
+        sessionToolSet: SessionToolSet | undefined;
+    } {
+        const mcpServer = new McpServer(this.serverInfo);
+        let sessionToolSet: SessionToolSet | undefined;
+
+        if (this.sessionToolFactory) {
+            sessionToolSet = this.sessionToolFactory.create();
+        }
+
+        const tools = this.tools.registerAllOn(mcpServer);
+        if (sessionToolSet) {
+            for (const item of sessionToolSet.tools) {
+                const instances = item instanceof ToolPackage ? item.tools() : [item];
+                for (const tool of instances) {
+                    tools.set(tool.name, registerToolOnServer(mcpServer, tool, this.observer));
+                }
+            }
+        }
+        this.registerDocumentsOn(mcpServer);
+        this.tools.applyEnabledStateTo(tools);
+        return { mcpServer, tools, sessionToolSet };
+    }
+
+    /** Register every configured document resource on the given fresh server. */
+    private registerDocumentsOn(mcpServer: McpServer): void {
+        for (const entry of this._registeredDocuments) {
+            switch (entry.kind) {
+                case DocumentKind.File:
+                    registerFileResourceOnServer(mcpServer, entry, this.observer);
+                    break;
+                case DocumentKind.Folder:
+                    registerFolderResourcesOnServer(mcpServer, entry, this.observer);
+                    break;
+                case DocumentKind.Content:
+                    registerContentDocumentOnServer(mcpServer, entry, this.observer);
+                    break;
+            }
+        }
     }
 
     /** Look up a session by ID under the mutex. Returns `null` if not found. */
@@ -276,7 +379,17 @@ export class HttpMcpServer extends BaseMcpServer {
                 return;
             }
 
-            await this.handleCreateSession(req, res);
+            // A session-less POST may be a server/discover probe from a modern
+            // client. Answer it with 200 + JSON-RPC -32601 so the client falls
+            // back to the legacy initialize handshake, without creating a
+            // session. Non-probe POSTs are replayed byte-identically into
+            // handleCreateSession so initialize handling is unchanged.
+            const inspected = await inspectSessionlessPost(req);
+            if (inspected.method === DISCOVER_METHOD) {
+                respondMethodNotFound(res, inspected.id);
+                return;
+            }
+            await this.handleCreateSession(inspected.replay() as unknown as express.Request, res);
         } catch {
             if (!res.headersSent) {
                 res.status(500).end();
@@ -301,7 +414,9 @@ export class HttpMcpServer extends BaseMcpServer {
             res.status(404).end();
             return;
         }
+        await this.disposeSessionToolSet(session.sessionToolSet);
         await session.transport.handleRequest(req, res);
+        this.hookEmitter.emit(ServerEvent.SessionDisposed, sessionId);
     }
 
     /** Route a request to an existing session. 404 if the session ID is unknown. */
@@ -325,7 +440,7 @@ export class HttpMcpServer extends BaseMcpServer {
      */
     private async handleCreateSession(req: express.Request, res: express.Response): Promise<void> {
         let createdSessionId: string | null = null;
-        const { mcpServer, tools } = this.createFreshMcpServer();
+        const { mcpServer, tools, sessionToolSet } = this.createFreshMcpServer();
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid: string) => {
@@ -336,9 +451,30 @@ export class HttpMcpServer extends BaseMcpServer {
         await transport.handleRequest(req, res);
 
         if (createdSessionId) {
-            await this.setSession(createdSessionId, { transport, mcpServer, tools });
+            await this.setSession(createdSessionId, {
+                transport,
+                mcpServer,
+                tools,
+                ...(sessionToolSet !== undefined ? { sessionToolSet } : {})
+            });
+            this.hookEmitter.emit(ServerEvent.SessionCreated, createdSessionId);
         } else {
+            await this.disposeSessionToolSet(sessionToolSet);
             await transport.close();
+        }
+    }
+
+    /** Awaits a session tool set's dispose hook, swallowing errors so cleanup never blocks teardown. */
+    private async disposeSessionToolSet(sessionToolSet: SessionToolSet | undefined): Promise<void> {
+        if (!sessionToolSet) {
+            return;
+        }
+        try {
+            await sessionToolSet.dispose();
+        } catch (error) {
+            console.warn(
+                `failed to dispose session tool set: ${error instanceof Error ? error.message : String(error)}`
+            );
         }
     }
 
@@ -353,13 +489,16 @@ export class HttpMcpServer extends BaseMcpServer {
     async start(): Promise<void> {
         if (this.expressServer !== null) return;
         this.expressServer = this.expressApp.listen(this.port);
+        this.hookEmitter.emit(ServerEvent.Started);
     }
 
     /** Stop the Express listener, close all sessions, and destroy lingering connections. */
     async onStop(): Promise<void> {
         const sessions = await this.clearSessions();
-        for (const [, session] of sessions) {
+        for (const [sessionId, session] of sessions) {
+            await this.disposeSessionToolSet(session.sessionToolSet);
             await session.transport.close();
+            this.hookEmitter.emit(ServerEvent.SessionDisposed, sessionId);
         }
         const server = this.expressServer;
         this.expressServer = null;

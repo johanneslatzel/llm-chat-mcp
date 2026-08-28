@@ -1,4 +1,4 @@
-# `toolResultsToMcp`
+# toolResultsToMcp
 
 Converts an array of llm-chat [`ToolResult`][llm-chat] into the MCP
 `CallToolResult` shape. Maps each result to a `{ type: "text", text: string }`

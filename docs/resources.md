@@ -1,27 +1,73 @@
 # Document Resources
 
 Servers can expose documents as MCP **resources**: read-only content served
-over `resources/list` and `resources/read`. Two registration methods cover the
-two container shapes:
+over `resources/list` and `resources/read`. Three registration methods cover
+the different container shapes:
 
 - [`registerDocument`](servers/base.md#registerdocumentpathorconfig): a single **file**
 - [`registerFolder`](servers/base.md#registerfolderpathorconfig): every matching **file**
   in a folder (recursively)
+- [`registerContentDocument`](servers/base.md#registercontentdocumentconfig): an
+  **in-memory** string or provider function, served from RAM on every read
 
 ## How it works
 
-| Registration             | Result                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| `registerDocument(file)` | One static resource at `file:///…/file.md`, read lazily on `resources/read`  |
-| `registerFolder(dir)`    | Every matching file (default: all supported types) becomes a static resource |
+| Registration                      | Result                                                                       |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `registerDocument(file)`          | One static resource at `file:///…/file.md`, read lazily on `resources/read`  |
+| `registerFolder(dir)`             | Every matching file (default: all supported types) becomes a static resource |
+| `registerContentDocument(config)` | A dynamic resource at `content://name`, content fetched on every read        |
 
 Folder scans are **recursive** and resource `name`s are the file path relative
 to the registered folder root (e.g. `notes.md`, `sub/guide.md`). Files are read
 lazily on each `resources/read`, so changes on disk are picked up. A folder with
 no matching files registers nothing.
 
-Registered files and folders appear in the client's `resources/list` as normal
-static resources. No resource templates are used.
+Registered files, folders, and content documents appear in the client's
+`resources/list` as normal static resources. No resource templates are used.
+
+## Content documents
+
+Content documents serve in-memory strings without any file on disk. The `content`
+field accepts either a static string or a **provider function** called on every
+`resources/read`, so the content can be regenerated dynamically (e.g. from a
+registry or cache).
+
+```typescript
+import { StdioMcpServer } from '@johannes.latzel/llm-chat-mcp';
+
+const server = new StdioMcpServer({ name: 'doc-server', version: '1.0.0' });
+
+// Static content
+server.registerContentDocument({ name: 'greeting', content: 'Hello world' });
+
+// Dynamic content: regenerated on every read
+server.registerContentDocument({
+    name: 'skills',
+    description: 'Available skills',
+    mimeType: 'text/yaml',
+    content: () => generateSkillListing() // called on every resources/read
+});
+
+await server.start();
+```
+
+The provider may be `async`. Errors thrown inside the provider are wrapped in an
+MCP error and reported to the observer (if set).
+
+| Field         | Type                                        | Description                                    |
+| ------------- | ------------------------------------------- | ---------------------------------------------- |
+| `name`        | `string`                                    | Unique resource name and URI segment           |
+| `content`     | `string \| () => string \| Promise<string>` | Static string or provider called on every read |
+| `title`       | `string`                                    | Resource title shown by clients                |
+| `description` | `string`                                    | Resource description shown by clients          |
+| `mimeType`    | `string`                                    | MIME type (default: `text/markdown`)           |
+
+### URI scheme
+
+Content documents use `content://` URIs (e.g. `content://skills`), distinct from
+the `file://` URIs of file and folder resources. This prevents collisions when a
+file path happens to match a content document name.
 
 ## MIME types
 
@@ -46,6 +92,7 @@ const server = new StdioMcpServer({ name: 'doc-server', version: '1.0.0' });
 server.registerDocument('./README.md');
 server.registerFolder('./docs'); // every supported type, recursively
 server.registerFolder({ path: './data', extensions: ['md', 'txt'] });
+server.registerContentDocument({ name: 'status', content: 'ok' });
 
 await server.start();
 ```
@@ -60,8 +107,9 @@ Clients then call `client.listResources()` to see every document and
 - Registering a path that does not exist, or registering a directory via
   `registerDocument` / a file via `registerFolder`, throws at registration time.
 - Reading a file that has been deleted after registration throws an MCP error.
+- Content document names must be unique across all registered content documents.
 
 ---
 
 See also: [`BaseMcpServer`](servers/base.md), [Architecture](architecture.md),
-[Quick Start](quickstart.md)
+[Quickstart](quickstart.md)

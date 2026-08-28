@@ -1,6 +1,6 @@
 {
     "name": "@johannes.latzel/llm-chat-mcp",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "MCP server for llm-chat Tool packages",
     "license": "MIT",
     "sideEffects": false,
@@ -41,7 +41,7 @@
     },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
-        "verify": "tsc --noEmit && eslint . --max-warnings 0 && vitest run --coverage",
+        "verify": "tsc --noEmit && eslint . --max-warnings 0 && npm run check:lines && vitest run --coverage",
         "lint": "eslint . --max-warnings 0",
         "format": "prettier --write 'docs/**/*.md' 'src/**/*.ts' 'tests/**/*.ts'",
         "docs": "docker run --rm -it -p 8000:8000 -v $PWD:/docs squidfunk/mkdocs-material",
@@ -52,7 +52,8 @@
         "prepare": "husky",
         "audit": "npm audit --audit-level=high",
         "prebuild": "rm -rf dist/",
-        "prepack": "npm run build"
+        "prepack": "npm run build",
+        "check:lines": "check-line-limits"
     },
     "lint-staged": {
         "src/**/*.ts": [
@@ -83,6 +84,7 @@
         "prettier": "^3.5.3",
         "tsx": "^4.23.12",
         "typescript": "^6.0.3",
-        "vitest": "^4.1.8"
+        "vitest": "^4.1.8",
+        "@johannes.latzel/check-line-limits": "^1.0.1"
     }
 }

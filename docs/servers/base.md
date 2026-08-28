@@ -20,10 +20,8 @@ Creates the underlying `McpServer` from `@modelcontextprotocol/sdk`.
   the set of disabled tools. It is the single source of truth, shared by the
   base server and every HTTP session.
 - A **view** is one SDK server's set of `RegisteredTool` handles, the base
-  `McpServer` plus one fresh server per HTTP session (see
-  [`createFreshMcpServer()`](#createfreshmcpserver-protected)). The registry
-  holds no handles itself; it pushes its state onto whichever handle sets it
-  is given.
+  `McpServer` plus one fresh server per HTTP session. The registry holds no
+  handles itself; it pushes its state onto whichever handle sets it is given.
 
 [`registerTool(item)`](#registertoolitem) adds tools to the model and
 materializes them on the base server, mirroring its handles;
@@ -61,18 +59,18 @@ Disables a single tool (adding it to the disabled set) on the base server and
 every active session. Does not throw for unknown names. Re-enable with
 [`enableTool(name)`](#enabletoolname).
 
-| Parameter | Type     | Description               |
-| --------- | -------- | ------------------------- |
-| `name`    | `string` | Tool name to disable      |
+| Parameter | Type     | Description          |
+| --------- | -------- | -------------------- |
+| `name`    | `string` | Tool name to disable |
 
 ## `enableTool(name)`
 
 Enables a single tool (removing it from the disabled set) on the base server
 and every active session. Does not throw for unknown names.
 
-| Parameter | Type     | Description             |
-| --------- | -------- | ----------------------- |
-| `name`    | `string` | Tool name to enable     |
+| Parameter | Type     | Description         |
+| --------- | -------- | ------------------- |
+| `name`    | `string` | Tool name to enable |
 
 ## `registerDocument(pathOrConfig)`
 
@@ -123,6 +121,51 @@ Subclasses implement this to connect the server to a transport. See
 [`StdioMcpServer.start()`](stdio.md#start) and
 [`HttpMcpServer.start()`](http.md#start).
 
+## `registerContentDocument(config)`
+
+Registers an **in-memory** string or provider function as a dynamic MCP resource.
+The content is served from RAM on every `resources/read`: no file on disk is
+involved. The resource URI uses the `content://` scheme.
+
+| Parameter | Type                    | Description                                      |
+| --------- | ----------------------- | ------------------------------------------------ |
+| `config`  | `ContentDocumentConfig` | Config with name, content, and optional metadata |
+
+### `ContentDocumentConfig`
+
+| Field         | Type                                        | Description                                    |
+| ------------- | ------------------------------------------- | ---------------------------------------------- |
+| `name`        | `string`                                    | Unique resource name and URI segment           |
+| `content`     | `string \| () => string \| Promise<string>` | Static string or provider called on every read |
+| `title`       | `string`                                    | Resource title shown by clients                |
+| `description` | `string`                                    | Resource description shown by clients          |
+| `mimeType`    | `string`                                    | MIME type (default: `text/markdown`)           |
+
+Like `registerDocument` and `registerFolder`, `registerContentDocument` must
+be called before `start()`.
+
+See [`StdioMcpServer.start()`](stdio.md#start) and
+[`HttpMcpServer.start()`](http.md#start).
+
+## `hook()`
+
+Returns a `McpServerHookBuilder` for registering lifecycle hooks in the
+`@johannes.latzel/llm-chat` style. Each builder method (`.started()`,
+`.toolRegistered(...names?)`, `.documentRegistered()`) returns a filter builder
+whose `do(callback)` registers the callback and returns a disposable `Hook`.
+Callbacks are invoked fire-and-forget; errors are caught and logged, so a hook
+never breaks the server. See [Hooks](../hooks.md).
+
+| Event                | Payload           |
+| -------------------- | ----------------- |
+| `started`            | —                 |
+| `toolRegistered`     | `name: string`    |
+| `documentRegistered` | `{ kind, name? }` |
+
+`HttpMcpServer` overrides `hook()` to return an `HttpServerHookBuilder` that
+additionally exposes `.sessionCreated()` and `.sessionDisposed()`. See
+[HTTP hooks](http.md#lifecycle-hooks).
+
 ## `stop()`
 
 Calls the `onStop()` lifecycle hook then closes the underlying `McpServer`.
@@ -132,12 +175,6 @@ Calls the `onStop()` lifecycle hook then closes the underlying `McpServer`.
 Lifecycle hook called before the MCP server socket closes. Override to clean up
 transport resources. [`HttpMcpServer`](http.md) overrides this to close HTTP
 sessions.
-
-## `createFreshMcpServer()` (protected)
-
-Creates a brand-new `McpServer` with all previously registered tools and
-documents replayed. Used by [`HttpMcpServer`](http.md#lifecycle) to give each
-HTTP session its own isolated server instance.
 
 ## Types
 

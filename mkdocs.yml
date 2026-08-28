@@ -14,9 +14,10 @@ theme:
         name: Switch to light mode
 nav:
   - Overview: index.md
-  - Quick Start: quickstart.md
+  - Quickstart: quickstart.md
   - Architecture: architecture.md
   - Document Resources: resources.md
+  - Hooks: hooks.md
   - Servers:
     - Servers: servers/index.md
     - BaseMcpServer: servers/base.md

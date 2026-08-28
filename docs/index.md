@@ -6,7 +6,7 @@ be served over stdio or HTTP.
 
 ## Navigation
 
-- [Quick Start](quickstart.md): run a stdio or HTTP server
+- [Quickstart](quickstart.md): run a stdio or HTTP server
 - [Architecture](architecture.md): design and internals
 - [Document Resources](resources.md): expose documents as MCP resources
 - [Servers](servers/index.md): `BaseMcpServer`, `StdioMcpServer`, `HttpMcpServer`

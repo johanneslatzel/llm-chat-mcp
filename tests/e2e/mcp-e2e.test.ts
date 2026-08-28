@@ -283,6 +283,4 @@ describe('MCP end-to-end', () => {
         await client.close();
         await server.stop();
     });
-
-
 });
