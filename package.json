@@ -63,7 +63,7 @@
         ]
     },
     "dependencies": {
-        "@johannes.latzel/llm-chat": "^0.7.0",
+        "@johannes.latzel/llm-chat": "^0.8.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "async-mutex": "^0.5.0",
         "express": "^5.2.1",
