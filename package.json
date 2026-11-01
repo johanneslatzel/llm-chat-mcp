@@ -1,6 +1,6 @@
 {
     "name": "@johannes.latzel/llm-chat-mcp",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "MCP server for llm-chat Tool packages",
     "license": "MIT",
     "sideEffects": false,
@@ -25,7 +25,7 @@
         "tool"
     ],
     "engines": {
-        "node": ">=20"
+        "node": ">=22"
     },
     "publishConfig": {
         "access": "public"
@@ -41,7 +41,7 @@
     },
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
-        "verify": "tsc --noEmit && eslint . --max-warnings 0 && npm run check:lines && vitest run --coverage",
+        "verify": "tsc --noEmit && eslint . --max-warnings 0 && npm run check:lines && npm run check:mkdocs && vitest run --coverage",
         "lint": "eslint . --max-warnings 0",
         "format": "prettier --write 'docs/**/*.md' 'src/**/*.ts' 'tests/**/*.ts'",
         "docs": "docker run --rm -it -p 8000:8000 -v $PWD:/docs squidfunk/mkdocs-material",
@@ -53,7 +53,8 @@
         "audit": "npm audit --audit-level=high",
         "prebuild": "rm -rf dist/",
         "prepack": "npm run build",
-        "check:lines": "check-line-limits"
+        "check:lines": "check-line-limits",
+        "check:mkdocs": "check-mkdocs"
     },
     "lint-staged": {
         "src/**/*.ts": [
@@ -63,7 +64,7 @@
         ]
     },
     "dependencies": {
-        "@johannes.latzel/llm-chat": "^0.7.0",
+        "@johannes.latzel/llm-chat": "^0.10.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "async-mutex": "^0.5.0",
         "express": "^5.2.1",
@@ -71,11 +72,13 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
+        "@johannes.latzel/check-line-limits": "^1.0.1",
+        "@johannes.latzel/check-mkdocs": "^0.1.0",
         "@types/express": "^5.0.6",
         "@types/node": "^26.2.0",
         "@typescript-eslint/eslint-plugin": "^8.60.0",
         "@typescript-eslint/parser": "^8.60.0",
-        "@vitest/coverage-v8": "^4.1.8",
+        "@vitest/coverage-v8": "^5.0.1",
         "eslint": "^10.8.1",
         "eslint-config-prettier": "^10.1.2",
         "eslint-plugin-n": "^18.3.0",
@@ -84,7 +87,6 @@
         "prettier": "^3.5.3",
         "tsx": "^4.23.12",
         "typescript": "^6.0.3",
-        "vitest": "^4.1.8",
-        "@johannes.latzel/check-line-limits": "^1.0.1"
+        "vitest": "^5.0.1"
     }
 }

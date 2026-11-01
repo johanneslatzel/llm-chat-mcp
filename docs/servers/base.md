@@ -39,6 +39,16 @@ cause an error from the SDK (not silently overwritten). Must be called before
 | --------- | --------------------- | ------------------------------------------- |
 | `item`    | `Tool \| ToolPackage` | Single tool or package of tools to register |
 
+## Hidden parameter aliases
+
+llm-chat tools may declare hidden argument aliases such as `path` for `paths`.
+The server installs a transport interceptor before connecting that calls
+`tool.normalizeArguments()` on every `tools/call` request. This runs before the
+MCP SDK validates the arguments, while the advertised JSON schema and the
+`tools/list` output stay unchanged. The interceptor uses the shared tool
+registry plus any session-scoped tool set. See
+[Architecture](../architecture.md#hidden-parameter-aliases).
+
 ## `setDisabledTools(names)`
 
 Replaces the set of disabled tools. Because it replaces the whole set, passing

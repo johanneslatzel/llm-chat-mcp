@@ -1,6 +1,7 @@
 export { GreetTool } from './helper/greet-tool.js';
 export { ErrorTool } from './helper/error-tool.js';
 export { NoParamTool } from './helper/no-param-tool.js';
+export { AliasTool } from './helper/test-tools.js';
 export {
     BaseMcpServer as McpToolServer,
     StdioMcpServer,

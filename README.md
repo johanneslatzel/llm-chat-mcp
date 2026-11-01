@@ -15,6 +15,8 @@ MCP server library for the `@johannes.latzel/llm-chat` ecosystem. Wraps `Tool`
 and `ToolPackage` instances behind the [Model Context Protocol][mcp] over stdio
 or Streamable HTTP.
 
+![llm-chat-mcp architecture: shared ToolRegistry and documents feed the base and per-session SDK servers](https://raw.githubusercontent.com/johanneslatzel/llm-chat-mcp/main/docs/assets/llm-chat-mcp-architecture.svg)
+
 ## Features
 
 - **Stdio** and **Streamable HTTP** transports
@@ -26,7 +28,7 @@ or Streamable HTTP.
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js >= 22
 
 ## Installation
 

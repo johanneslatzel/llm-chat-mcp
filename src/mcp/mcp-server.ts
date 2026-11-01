@@ -24,6 +24,7 @@ import {
 } from './document-resource.js';
 import type { McpServerObserver } from './observer.js';
 import { registerToolOnServer } from './tool-registration.js';
+import { normalizeToolCallArguments } from '../lib/tool-call-normalizer.js';
 import type { SessionToolFactory, SessionToolSet } from './session-tools.js';
 import {
     DISCOVER_METHOD,
@@ -206,6 +207,31 @@ export abstract class BaseMcpServer {
         await this.mcpServer.connect(transport);
     }
 
+    /**
+     * Installs a transport interceptor that rewrites hidden parameter aliases
+     * to their canonical names before the MCP SDK validates a `tools/call`
+     * request. The advertised input schema is not changed.
+     */
+    protected installToolCallNormalizer(
+        transport: Transport,
+        tools: ReadonlyMap<string, Tool>
+    ): void {
+        const original = transport.onmessage;
+        transport.onmessage = (message, extra) => {
+            normalizeToolCallArguments(message, tools);
+            original?.(message, extra);
+        };
+    }
+
+    /** Snapshot every registered tool by name for pre-validation alias normalization. */
+    protected toolInstances(): Map<string, Tool> {
+        const instances = new Map<string, Tool>();
+        for (const { tool } of this.tools.toolStates) {
+            instances.set(tool.name, tool);
+        }
+        return instances;
+    }
+
     /** Start the server (bind to its transport). Must be called once before accepting requests. */
     abstract start(): Promise<void>;
 
@@ -222,7 +248,9 @@ export abstract class BaseMcpServer {
 /** MCP server that communicates over standard input / output (stdio). */
 export class StdioMcpServer extends BaseMcpServer {
     async start(): Promise<void> {
-        await this.connect(new StdioServerTransport());
+        const transport = new StdioServerTransport();
+        this.installToolCallNormalizer(transport, this.toolInstances());
+        await this.connect(transport);
         this.hookEmitter.emit(ServerEvent.Started);
     }
 }
@@ -281,6 +309,7 @@ export class HttpMcpServer extends BaseMcpServer {
     private createFreshMcpServer(): {
         mcpServer: McpServer;
         tools: Map<string, RegisteredTool>;
+        toolInstances: Map<string, Tool>;
         sessionToolSet: SessionToolSet | undefined;
     } {
         const mcpServer = new McpServer(this.serverInfo);
@@ -290,18 +319,20 @@ export class HttpMcpServer extends BaseMcpServer {
             sessionToolSet = this.sessionToolFactory.create();
         }
 
+        const toolInstances = this.toolInstances();
         const tools = this.tools.registerAllOn(mcpServer);
         if (sessionToolSet) {
             for (const item of sessionToolSet.tools) {
                 const instances = item instanceof ToolPackage ? item.tools() : [item];
                 for (const tool of instances) {
+                    toolInstances.set(tool.name, tool);
                     tools.set(tool.name, registerToolOnServer(mcpServer, tool, this.observer));
                 }
             }
         }
         this.registerDocumentsOn(mcpServer);
         this.tools.applyEnabledStateTo(tools);
-        return { mcpServer, tools, sessionToolSet };
+        return { mcpServer, tools, toolInstances, sessionToolSet };
     }
 
     /** Register every configured document resource on the given fresh server. */
@@ -440,13 +471,14 @@ export class HttpMcpServer extends BaseMcpServer {
      */
     private async handleCreateSession(req: express.Request, res: express.Response): Promise<void> {
         let createdSessionId: string | null = null;
-        const { mcpServer, tools, sessionToolSet } = this.createFreshMcpServer();
+        const { mcpServer, tools, toolInstances, sessionToolSet } = this.createFreshMcpServer();
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid: string) => {
                 createdSessionId = sid;
             }
         });
+        this.installToolCallNormalizer(transport as unknown as Transport, toolInstances);
         await mcpServer.connect(transport as unknown as Transport);
         await transport.handleRequest(req, res);
 

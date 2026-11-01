@@ -7,6 +7,7 @@ import { HttpMcpServer } from '../index.js';
 import { GreetTool } from '../index.js';
 import { ErrorTool } from '../index.js';
 import { NoParamTool } from '../index.js';
+import { AliasTool } from '../index.js';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -113,6 +114,33 @@ describe('MCP end-to-end', () => {
         await client.close();
     });
 
+    it('normalizes a hidden alias via stdio without exposing it in the schema', async () => {
+        const transport = new StdioClientTransport({
+            command: 'npx',
+            args: ['tsx', 'tests/helper/stdio-run-alias.ts']
+        });
+        const client = new Client({ name: 'e2e-client', version: '1.0.0' });
+        await client.connect(transport as Transport);
+
+        const toolsResult = await client.listTools();
+        const tool = toolsResult.tools.find((entry) => entry.name === 'alias-tool');
+        expect(tool).toBeDefined();
+        expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual(['paths']);
+        expect(tool!.inputSchema.required).toEqual(['paths']);
+
+        const callResult = (await client.callTool({
+            name: 'alias-tool',
+            arguments: { path: 'a.txt' }
+        })) as {
+            isError?: boolean;
+            content: Array<{ text?: string }>;
+        };
+        expect(callResult.isError).toBeFalsy();
+        expect(callResult.content[0]?.text).toBe('paths: a.txt');
+
+        await client.close();
+    });
+
     it('lists tools and calls greet via HTTP', async () => {
         const server = new HttpMcpServer({
             name: 'e2e-http',
@@ -178,6 +206,43 @@ describe('MCP end-to-end', () => {
         })) as { isError?: boolean; content: Array<{ text?: string }> };
         expect(callResult.isError).toBe(true);
         expect(callResult.content[0]?.text).toBe('Something went wrong');
+
+        await client.close();
+        await server.stop();
+    });
+
+    it('normalizes a hidden alias via HTTP without exposing it in the schema', async () => {
+        const server = new HttpMcpServer({
+            name: 'e2e-http-alias',
+            version: '1.0.0',
+            port: 0
+        });
+        server.registerTool(new AliasTool());
+        await server.start();
+        const address = (server as any).expressServer.address();
+        const port: number = address.port;
+
+        const transport = new StreamableHTTPClientTransport(
+            new URL(`http://localhost:${port}/mcp`)
+        );
+        const client = new Client({ name: 'e2e-http-alias-client', version: '1.0.0' });
+        await client.connect(transport as Transport);
+
+        const toolsResult = await client.listTools();
+        const tool = toolsResult.tools.find((entry) => entry.name === 'alias-tool');
+        expect(tool).toBeDefined();
+        expect(Object.keys(tool!.inputSchema.properties ?? {})).toEqual(['paths']);
+        expect(tool!.inputSchema.required).toEqual(['paths']);
+
+        const callResult = (await client.callTool({
+            name: 'alias-tool',
+            arguments: { path: 'a.txt' }
+        })) as {
+            isError?: boolean;
+            content: Array<{ text?: string }>;
+        };
+        expect(callResult.isError).toBeFalsy();
+        expect(callResult.content[0]?.text).toBe('paths: a.txt');
 
         await client.close();
         await server.stop();

@@ -6,7 +6,7 @@
 npm install @johannes.latzel/llm-chat-mcp
 ```
 
-Requirements: Node.js >= 20, TypeScript >= 5.0 (the package ships `.js` with
+Requirements: Node.js >= 22, TypeScript >= 5.0 (the package ships `.js` with
 type declarations from `dist/`).
 
 ## Stdio server (one-liner)

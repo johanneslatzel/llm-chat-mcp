@@ -59,3 +59,27 @@ export class TestPackage extends ToolPackage {
         super([new TestTool('pkg-tool-a'), new TestTool('pkg-tool-b')]);
     }
 }
+
+/** Tool that accepts a hidden `path` alias for its required `paths` array. */
+export class AliasTool extends Tool {
+    constructor() {
+        super(
+            'alias-tool',
+            'Tool with a hidden path alias',
+            new ToolParameters(
+                {
+                    paths: ToolParameterProperty.array('Paths').accepts('path')
+                },
+                ['paths']
+            )
+        );
+    }
+
+    protected async onExecute(args: Record<string, unknown>): Promise<PartialToolResult> {
+        const paths = args.paths;
+        if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) {
+            return { result: 'paths must be a string array', status: ResultStatus.Error };
+        }
+        return { result: `paths: ${paths.join(',')}`, status: ResultStatus.Success };
+    }
+}

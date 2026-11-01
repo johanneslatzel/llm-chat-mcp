@@ -120,12 +120,17 @@ async function deleteSession(port: number, sessionId: string): Promise<number> {
     });
 }
 
-async function callTool(port: number, sessionId: string): Promise<string> {
+async function callToolWithArgs(
+    port: number,
+    sessionId: string,
+    name: string,
+    args: Record<string, unknown>
+): Promise<string> {
     const body = JSON.stringify({
         jsonrpc: '2.0',
         id: 2,
         method: 'tools/call',
-        params: { name: 'session_tool', arguments: { input: 'x' } }
+        params: { name, arguments: args }
     });
     return await new Promise<string>((resolve, reject) => {
         const req = http.request(
@@ -190,7 +195,50 @@ async function listTools(port: number, sessionId: string): Promise<string> {
     });
 }
 
+async function callTool(port: number, sessionId: string): Promise<string> {
+    return callToolWithArgs(port, sessionId, 'session_tool', { input: 'x' });
+}
+
 describe('SessionToolFactory (HttpMcpServer)', () => {
+    it('normalizes hidden aliases for session-scoped tools', async () => {
+        class AliasedSessionTool extends Tool {
+            constructor() {
+                super(
+                    'alias_session_tool',
+                    'Session tool with a hidden alias',
+                    new ToolParameters(
+                        { paths: ToolParameterProperty.array('Paths').accepts('path') },
+                        ['paths']
+                    )
+                );
+            }
+
+            protected async onExecute(args: Record<string, unknown>): Promise<PartialToolResult> {
+                return {
+                    result: `paths: ${(args.paths as string[]).join(',')}`,
+                    status: ResultStatus.Success
+                };
+            }
+        }
+
+        const factory: SessionToolFactory = {
+            create(): SessionToolSet {
+                return {
+                    tools: [new AliasedSessionTool()],
+                    async dispose() {}
+                };
+            }
+        };
+        const { server, port } = await startServer(factory);
+        const sessionId = await createSession(port);
+        const body = await callToolWithArgs(port, sessionId, 'alias_session_tool', {
+            path: 'a.txt'
+        });
+        expect(body).toContain('paths: a.txt');
+
+        await server.stop();
+    });
+
     it('creates a fresh tool set per session with independent state', async () => {
         const dispose = vi.fn();
         const { server, port } = await startServer(createFactory(dispose));

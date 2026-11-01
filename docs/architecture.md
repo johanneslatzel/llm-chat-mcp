@@ -1,5 +1,7 @@
 # Architecture
 
+![llm-chat-mcp architecture: shared ToolRegistry and documents feed the base and per-session SDK servers](assets/llm-chat-mcp-architecture.svg)
+
 ## Overview
 
 `@johannes.latzel/llm-chat-mcp` bridges the `@johannes.latzel/llm-chat` tool
@@ -47,12 +49,12 @@ BaseMcpServer  (abstract)
 ### [`HttpMcpServer`](servers/http.md)
 
 - Express-based server listening on a configurable port
-- Provides a single route `POST /mcp` (Streamable HTTP)
+- Provides the `/mcp` endpoint (POST/GET/DELETE, Streamable HTTP)
 - **Multi-session architecture**: each HTTP client gets its own
   `(StreamableHTTPServerTransport, McpServer)` pair, keyed by the
   `Mcp-Session-Id` header
 - **Session-scoped tools**: an optional `SessionToolFactory` (see
-  [`SessionToolFactory`](servers/http.md#sessiontoolfactory--sessiontoolset))
+  [`SessionToolFactory`](servers/http.md#sessiontoolfactory-sessiontoolset))
   produces a fresh `SessionToolSet` per session: tool instances that carry
   session-independent state (e.g. a dedicated workspace root). The tool set's
   `dispose()` hook releases that state when the session ends. Without a
@@ -111,6 +113,19 @@ onto the base server's handles and every active session's; new sessions replay
 the model via `createFreshMcpServer()`. The SDK keeps its own private copy of
 each server's handles, so `BaseMcpServer` shadows the base server's only to
 push enable/disable state onto it.
+
+## Hidden parameter aliases
+
+llm-chat tools may declare hidden argument aliases, for example `path` for
+`paths`. The MCP SDK validates `tools/call` arguments against the advertised
+JSON schema before invoking a tool handler, and zod strips unknown keys, so
+normalizing inside the handler is too late. The servers install a transport
+message interceptor before connecting: for a `tools/call`, it looks up the
+target tool and calls `tool.normalizeArguments()` on the arguments first. The
+zod schema and `tools/list` output are unchanged, so aliases are never
+advertised and canonical parameters stay required. The interceptor is installed
+for the stdio transport and for every HTTP session transport, using the shared
+registry plus the session-scoped tool set.
 
 ## Internal converters
 
