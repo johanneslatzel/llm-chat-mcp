@@ -1,4 +1,4 @@
-import { Tool, ToolPackage } from '@johannes.latzel/llm-chat';
+import { Tool, ToolPackage } from '@johannes.latzel/llm-chat-tool';
 import type { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerToolOnServer } from './tool-registration.js';
 import type { McpServerObserver } from './observer.js';

@@ -6,7 +6,7 @@
 npm install @johannes.latzel/llm-chat-mcp
 ```
 
-Requirements: Node.js >= 22, TypeScript >= 5.0 (the package ships `.js` with
+Requirements: Node.js >= 22, TypeScript >= 6.0 (the package ships `.js` with
 type declarations from `dist/`).
 
 ## Stdio server (one-liner)
@@ -81,7 +81,10 @@ Closes all active HTTP sessions / stdio transport before returning. See
 
 ## Next steps
 
-See the [Architecture](architecture.md) for design details and the
-[Server reference](servers/index.md) for the full API surface.
+See the [Architecture](architecture.md) for design details.
+
+## Full API
+
+See the [Server reference](servers/index.md) for the full API surface.
 
 [streamable-http]: https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http

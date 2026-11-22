@@ -5,7 +5,7 @@ import {
     ToolParameterProperty,
     PartialToolResult,
     ResultStatus
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 
 /** Tool that returns a success result echoing the input argument. */
 export class TestTool extends Tool {

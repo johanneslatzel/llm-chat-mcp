@@ -10,6 +10,7 @@ be served over stdio or HTTP.
 - [Architecture](architecture.md): design and internals
 - [Document Resources](resources.md): expose documents as MCP resources
 - [Servers](servers/index.md): `BaseMcpServer`, `StdioMcpServer`, `HttpMcpServer`
+- [Hooks](hooks.md): lifecycle hooks
 - [Converters](converters/index.md): schema and result conversion
 
 ## License

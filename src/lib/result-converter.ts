@@ -1,4 +1,4 @@
-import { ResultStatus, ToolResult } from '@johannes.latzel/llm-chat';
+import { ResultStatus, ToolResult } from '@johannes.latzel/llm-chat-tool';
 
 /** A single text content item in an MCP `CallToolResult`. */
 type ToolResultEnty = {

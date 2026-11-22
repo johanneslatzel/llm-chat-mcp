@@ -1,5 +1,5 @@
 import type { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { Tool } from '@johannes.latzel/llm-chat';
+import type { Tool } from '@johannes.latzel/llm-chat-tool';
 import { toolSchemaToZod } from '../lib/schema-converter.js';
 import { toolResultsToMcp } from '../lib/result-converter.js';
 import type { McpServerObserver } from './observer.js';

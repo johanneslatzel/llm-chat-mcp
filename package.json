@@ -1,6 +1,6 @@
 {
     "name": "@johannes.latzel/llm-chat-mcp",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "MCP server for llm-chat Tool packages",
     "license": "MIT",
     "sideEffects": false,
@@ -64,7 +64,7 @@
         ]
     },
     "dependencies": {
-        "@johannes.latzel/llm-chat": "^0.10.0",
+        "@johannes.latzel/llm-chat-tool": "^0.1.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "async-mutex": "^0.5.0",
         "express": "^5.2.1",

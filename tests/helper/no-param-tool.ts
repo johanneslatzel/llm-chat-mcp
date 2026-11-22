@@ -1,4 +1,4 @@
-import { PartialToolResult, ResultStatus, Tool, ToolParameters } from '@johannes.latzel/llm-chat';
+import { PartialToolResult, ResultStatus, Tool, ToolParameters } from '@johannes.latzel/llm-chat-tool';
 
 export class NoParamTool extends Tool {
     constructor() {

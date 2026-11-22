@@ -6,7 +6,7 @@ import {
     ToolParameterProperty,
     PartialToolResult,
     ResultStatus
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistry } from '../index.js';
 

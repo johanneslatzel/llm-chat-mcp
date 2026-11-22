@@ -58,13 +58,13 @@ function jsonSchemaPropToZod(prop: Record<string, unknown>, required: boolean): 
 }
 
 /**
- * Convert an llm-chat {@link Tool} (via its `toOpenAI()` output) into a
- * Zod object schema that the MCP SDK can use for input validation.
+ * Convert an llm-chat {@link Tool} (via its neutral `definition()` output)
+ * into a Zod object schema that the MCP SDK can use for input validation.
  */
 export function toolSchemaToZod(tool: {
-    toOpenAI(): { function: { parameters?: Record<string, unknown> | null } };
+    definition(): { parameters?: Record<string, unknown> | null };
 }): z.ZodObject<Record<string, z.ZodType>> {
-    const params = tool.toOpenAI().function.parameters ?? {};
+    const params = tool.definition().parameters ?? {};
     const properties = (params.properties ?? {}) as Record<string, Record<string, unknown>>;
     const required = (params.required ?? []) as string[];
     const shape: Record<string, z.ZodType> = {};

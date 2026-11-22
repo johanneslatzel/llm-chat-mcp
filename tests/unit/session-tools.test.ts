@@ -7,7 +7,7 @@ import {
     ToolParameterProperty,
     PartialToolResult,
     ResultStatus
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 import { HttpMcpServer } from '../index.js';
 import type { SessionToolFactory, SessionToolSet } from '../index.js';
 import type { McpServerObserver } from '../index.js';

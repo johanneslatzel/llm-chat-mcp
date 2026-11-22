@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { ResultStatus } from '@johannes.latzel/llm-chat-tool';
 import { toolResultsToMcp } from '../../src/lib/result-converter.js';
 
 describe('toolResultsToMcp', () => {

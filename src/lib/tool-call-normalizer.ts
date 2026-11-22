@@ -1,5 +1,5 @@
 import type { JSONRPCMessage, JSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
-import type { Tool } from '@johannes.latzel/llm-chat';
+import type { Tool } from '@johannes.latzel/llm-chat-tool';
 
 /** Structural view of a JSON-RPC request that carries tool-call arguments. */
 interface ToolCallRequestMessage extends JSONRPCRequest {

@@ -1,4 +1,4 @@
-import type { Tool, ToolPackage } from '@johannes.latzel/llm-chat';
+import type { Tool, ToolPackage } from '@johannes.latzel/llm-chat-tool';
 
 /**
  * The tool inventory created for a single MCP session together with a

@@ -131,7 +131,7 @@ registry plus the session-scoped tool set.
 
 ### [`toolSchemaToZod`](converters/schema-converter.md) (schema-converter.ts)
 
-Converts the JSON Schema output from `Tool.toOpenAI().function.parameters` into
+Converts the JSON Schema output from `Tool.definition().parameters` into
 a Zod object schema. Supports: `string`, `number`, `integer`, `boolean`,
 `array` (with nested items), `object` (with nested properties). Recursively
 handles required/optional fields and `description` annotations.
@@ -186,7 +186,7 @@ and session-scoped tool sets.
 
 | Package                     | Role                         |
 | --------------------------- | ---------------------------- |
-| `@johannes.latzel/llm-chat` | Tool / ToolPackage framework |
+| `@johannes.latzel/llm-chat-tool` | Tool / ToolPackage framework |
 | `@modelcontextprotocol/sdk` | MCP protocol, transports     |
 | `express`                   | HTTP server                  |
 | `async-mutex`               | Session map synchronisation  |

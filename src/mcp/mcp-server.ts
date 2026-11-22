@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { Tool, ToolPackage } from '@johannes.latzel/llm-chat';
+import { Tool, ToolPackage } from '@johannes.latzel/llm-chat-tool';
 import { ToolRegistry } from './tool-registry.js';
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

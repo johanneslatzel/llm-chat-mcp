@@ -4,13 +4,14 @@ Abstract base class for an MCP server. Holds registered tools and provides the
 lifecycle contract. See [`src/mcp/mcp-server.ts`](../../src/mcp/mcp-server.ts)
 for the full signature.
 
-## `constructor(serverInfo)`
+## `constructor(serverInfo, observer?)`
 
 Creates the underlying `McpServer` from `@modelcontextprotocol/sdk`.
 
 | Parameter    | Type         | Description                         |
 | ------------ | ------------ | ----------------------------------- |
 | `serverInfo` | `ServerInfo` | `{ name: string; version: string }` |
+| `observer` | `McpServerObserver?` | Optional observer notified about tool calls and resource reads |
 
 ## Tool inventory and enable state
 

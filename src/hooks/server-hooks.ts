@@ -1,4 +1,4 @@
-import { Hook, HookBuilderBase } from '@johannes.latzel/llm-chat';
+import { Hook, HookBuilderBase } from '@johannes.latzel/llm-chat-tool';
 import { DocumentKind } from '../mcp/document-resource.js';
 
 /** Information about a registered document, passed to `documentRegistered` hooks. */

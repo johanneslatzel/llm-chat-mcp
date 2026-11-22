@@ -2,13 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { toolSchemaToZod } from '../../src/lib/schema-converter.js';
 
 function createMockTool(params: Record<string, unknown> | null): {
-    toOpenAI(): { function: { parameters?: Record<string, unknown> | null } };
+    definition(): { parameters?: Record<string, unknown> | null };
 } {
     return {
-        toOpenAI() {
-            return {
-                function: { parameters: params }
-            };
+        definition() {
+            return { parameters: params };
         }
     };
 }
